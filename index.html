@@ -27,7 +27,7 @@ h1{font-size:clamp(32px,9vw,48px);line-height:1.08;font-weight:900;margin:0 0 10
 h2{font-size:26px;line-height:1.2;font-weight:900;margin:0 0 12px;text-wrap:balance}
 h3{font-size:18px;margin:0 0 6px}
 p{margin:0 0 12px}.muted{color:var(--muted)}.small{font-size:13px}
-.prose{font-size:17px;line-height:1.85}
+.prose{font-size:17px;line-height:1.85;overflow-wrap:anywhere}
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:48px;padding:0 22px;border-radius:999px;border:0;background:var(--accent);color:var(--accent-ink);font-weight:700;cursor:pointer;text-decoration:none}
 .btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
 .btn.wide{width:100%}.btn:disabled{opacity:.45;cursor:not-allowed}
@@ -94,6 +94,7 @@ textarea.inp{min-height:110px;resize:vertical;line-height:1.6}
 .center{text-align:center}.mt{margin-top:18px}.mb{margin-bottom:18px}
 /* ===== admin ===== */
 .adm{--bg:light-dark(#f4f5f2,#16181a);--panel:light-dark(#fff,#1f2225);--ink:light-dark(#1b1f22,#e9ecee);--accent:light-dark(#1f5f8b,#7ab8e6);--accent-ink:light-dark(#fff,#0c1a24);--radius:12px;--font:'Noto Sans TC',system-ui,sans-serif;
+--muted:color-mix(in srgb,var(--ink) 62%,var(--bg));--line:color-mix(in srgb,var(--ink) 15%,transparent);--soft:color-mix(in srgb,var(--accent) 14%,var(--panel));
 background:var(--bg);color:var(--ink);min-height:100vh;font-family:var(--font);color-scheme:light dark}
 :root[data-theme=light] .adm{color-scheme:light}:root[data-theme=dark] .adm{color-scheme:dark}
 .abar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:12px max(3vw,14px);background:var(--panel);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:4}
@@ -415,7 +416,7 @@ document.addEventListener('click',async e=>{const b=e.target.closest('[data-act]
   case 'delGame':{if(!g||!await ask('刪除「'+g.title+'」？','題目、劇情與設定都會刪除，無法復原。','刪除'))break;
     await w(async()=>{for(const q of S.qs){await qRef(g.id,q.id).delete();await sRef(g.id,q.id).delete()}await gRef(g.id).delete();if(S.site.activeGame===g.id)await S.db.doc('meta/site').set({...S.site,activeGame:null})},'已刪除');selectGame(gameList().find(x=>x.id!==g.id)?.id||null);render();break}
   case 'seed':{let id;await w(async()=>{id=await seedSample()},'已載入範例遊戲');if(id){selectGame(id);render()}break}
-  case 'login':{if(!S.auth)break;const {auth,AU}=S.auth;try{await AU.signInWithPopup(auth,new AU.GoogleAuthProvider())}catch(x){if(/popup/.test(x?.code||''))AU.signInWithRedirect(auth,new AU.GoogleAuthProvider());else toast('登入失敗：'+(x?.code||''))}break}
+  case 'login':{if(!S.auth)break;const {auth,AU}=S.auth;try{await AU.signInWithPopup(auth,new AU.GoogleAuthProvider())}catch(x){const c=x?.code||'';toast(c==='auth/popup-blocked'?'瀏覽器擋住了登入視窗：請允許這個網站的彈出視窗，再按一次':c==='auth/popup-closed-by-user'||c==='auth/cancelled-popup-request'?'登入視窗已關閉':'登入失敗：'+c)}break}
   case 'logout':if(S.auth)S.auth.AU.signOut(S.auth.auth);break;
   case 'setActive':w(()=>S.db.doc('meta/site').set({...S.site,activeGame:g.id}),'玩家現在會看到這個遊戲');break;
   case 'saveInfo':{const d={};['title','subtitle','instructions','opening','ending','clearTitle','clearText'].forEach(k=>d[k]=val('gi-'+k));if(!d.title.trim()){toast('遊戲名稱不能空白');break}w(()=>gRef(g.id).update(d),'已儲存');break}
