@@ -68,6 +68,9 @@ textarea.inp{min-height:110px;resize:vertical;line-height:1.6}
 .pin.open span{background:var(--accent);border-color:var(--accent-ink)}.pin.open b{color:var(--accent-ink)}
 .pin.solved span{background:#3a9d5d;border-color:#fff}.pin.solved b{color:#fff}
 .pin.sel span{outline:4px solid #fff}
+.trow{display:grid;gap:8px;padding:12px 0;border-top:1px solid var(--line)}.trow:first-of-type{border-top:0}
+.tdots{display:flex;flex-wrap:wrap;gap:4px}.tdots span{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;font:700 11px 'Chakra Petch',sans-serif;background:var(--line);color:var(--muted)}.tdots span.o{background:#e0a100;color:#1a1206}.tdots span.s{background:#3a9d5d;color:#fff}
+.thumbdel{min-width:32px;min-height:32px;border:0;border-radius:8px;background:none;color:var(--muted);cursor:pointer}
 .kv{border-radius:var(--radius);overflow:hidden;border:1px solid var(--line);background:var(--panel);box-shadow:0 10px 30px rgba(0,0,0,.25)}.kv img{display:block;width:100%;height:auto;max-height:62vh;object-fit:cover}
 .qgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}
 .qcard{position:relative;display:grid;gap:4px;text-align:left;padding:14px;border-radius:var(--radius);background:var(--panel);border:1px solid var(--line);cursor:pointer;min-height:150px}
@@ -186,7 +189,9 @@ const game=()=>S.games[S.gid]||null;
 const allQs=()=>S.qs.slice().sort((a,b)=>(a.order??0)-(b.order??0));
 const playQs=()=>allQs().filter(q=>q.visible!==false);
 function prog(){const g=game();if(!g)return null;const k='3sia:'+g.id+':'+(g.round||0);if(!S.prog||S.prog.k!==k){S.prog=LS.get(k)||{k,team:'',stage:'home',unlocked:[],solved:[],start:0,end:0}}return S.prog}
-const saveProg=()=>{if(S.prog)LS.set(S.prog.k,S.prog)};
+const saveProg=()=>{if(S.prog){LS.set(S.prog.k,S.prog);pushProg()}};
+function devId(){if(!S.demo)return S.uid||null;let d=LS.get('3sia-demo-uid');if(!d){d=uid('d');LS.set('3sia-demo-uid',d)}return d}
+function pushProg(){clearTimeout(pushProg.t);pushProg.t=setTimeout(async()=>{const g=game(),p=S.prog,id=devId();if(!g||!p||!S.db||!id||(!S.demo&&S.canEdit)||p.stage==='home')return;const d={team:String(p.team||'未命名').slice(0,24),round:g.round||0,stage:p.stage,unlocked:p.unlocked.slice(0,15),solved:p.solved.slice(0,15),start:p.start||0,end:p.end||0,updatedAt:Date.now()};try{await S.db.doc('progress/'+g.id+'/teams/'+id).set(d)}catch(e){console.warn('progress',e)}},500)}
 const qState=q=>{const p=prog();return p.solved.includes(q.id)?'solved':p.unlocked.includes(q.id)?'open':'locked'};
 
 /* ---------- theme ---------- */
@@ -297,7 +302,7 @@ ${S.authUser?`<p class="muted">目前登入：${esc(S.authUser.email)}<br>這個
 `<p class="muted">用管理員的 Google 帳號登入，才能編輯遊戲。</p><button class="btn" data-act="login" ${S.auth?'':'disabled'}>用 Google 登入</button>`}
 <button class="btn ghost" data-act="toPlay">回到遊戲</button></div></div></div>`;
   const g=game(),gs=gameList(),act=S.site.activeGame;
-  const tabs=[['info','基本內容'],['style','風格'],['qs',`題目 ${g?allQs().length:0}/15`],['map','地圖'],['qr','QR 碼與連結']];
+  const tabs=[['info','基本內容'],['style','風格'],['qs',`題目 ${g?allQs().length:0}/15`],['map','地圖'],['qr','QR 碼與連結'],['prog','玩家進度']];
   return `<div class="adm"><header class="abar"><span class="t">3SIA 遊戲後台</span>
 ${gs.length?`<select id="a-game" aria-label="選擇遊戲">${gs.map(x=>`<option value="${x.id}" ${x.id===S.gid?'selected':''}>${esc(x.title)}${x.id===act?'（開放中）':''}</option>`).join('')}</select>`:''}
 <button class="btn" data-act="newGame">＋ 新遊戲</button>${g?`<button class="btn ghost" data-act="dupGame">複製</button>
@@ -305,7 +310,7 @@ ${g.id===act?'<span class="chip">玩家目前看到這個遊戲</span>':`<button
 <button class="btn ghost" data-act="toPlay">玩家畫面</button><button class="btn danger" data-act="delGame">刪除</button>`:''}
 ${S.demo?'<span class="chip">示範模式・資料只存在這台電腦</span>':`<button class="btn ghost" data-act="logout" title="${esc(S.authUser?.email||'')}">登出</button>`}</header>
 ${g?`<nav class="tabs">${tabs.map(([k,t])=>`<button class="${S.tab===k?'on':''}" data-act="tab" data-v="${k}">${t}</button>`).join('')}</nav>
-<main class="amain">${({info:tInfo,style:tStyle,qs:tQs,map:tMap,qr:tQR}[S.tab]||tInfo)(g)}</main>`:
+<main class="amain">${({info:tInfo,style:tStyle,qs:tQs,map:tMap,qr:tQR,prog:tProg}[S.tab]||tInfo)(g)}</main>`:
 `<main class="amain"><div class="panel center"><h2>還沒有任何遊戲</h2><p class="muted">按上方「新遊戲」建立第一個實境解謎，或先載入範例看看。</p><button class="btn" data-act="seed">載入範例遊戲</button></div></main>`}</div>`}
 const fld=(id,label,val,opt={})=>`<label class="f">${label}${opt.hint?`<span class="hint">${opt.hint}</span>`:''}${opt.area?`<textarea class="inp" id="${id}" rows="${opt.rows||5}">${esc(val)}</textarea>`:`<input class="inp" id="${id}" value="${esc(val)}" ${opt.attr||''}>`}</label>`;
 function tInfo(g){return `<div class="panel stack" style="max-width:820px">
@@ -348,6 +353,8 @@ function tMap(g){const qs=allQs(),sel=qs.find(x=>x.id===S.aq)||qs[0];if(sel)S.aq
 ${sel&&sel.x!=null?`<button class="btn ghost" data-act="unpin">移除這題的圖釘</button>`:''}
 <div class="row">${S.assets?`<label class="upl">${g.mapId?'更換地圖':'上傳地圖圖片'}<input type="file" accept="image/*" data-up="map"></label>`:''}${g.mapId?'<button class="btn ghost" data-act="clearMap">移除地圖</button>':''}</div></div>
 <div>${g.mapId?`<div class="map" id="amap" style="cursor:crosshair"><img src="${img(g.mapId)}" alt="地圖" draggable="false">${qs.map((x,i)=>x.x==null?'':`<span class="pin ${x.id===S.aq?'sel open':''}" style="left:${x.x}%;top:${x.y}%;pointer-events:none"><span></span><b>${i+1}</b></span>`).join('')}</div>`:'<div class="panel muted center" style="padding:60px 20px">上傳一張校園地圖或場地平面圖</div>'}</div></div>`}
+function ago(t){if(!t)return '—';const s=Math.max(0,Math.round((Date.now()-t)/1000));return s<60?'剛剛':s<3600?Math.floor(s/60)+' 分鐘前':Math.floor(s/3600)+' 小時前'}
+function tProg(g){const qs=playQs(),n=qs.length,ids=new Set(qs.map(q=>q.id)),r=g.round||0;const T=(S.teams||[]).filter(t=>(t.round||0)===r).map(t=>({...t,ns:(t.solved||[]).filter(x=>ids.has(x)).length,nu:(t.unlocked||[]).filter(x=>ids.has(x)).length}));T.sort((a,b)=>(!!b.end-!!a.end)||(a.end&&b.end?(a.end-a.start)-(b.end-b.start):0)||(b.ns-a.ns)||((a.start||0)-(b.start||0)));const done=T.filter(t=>t.end).length,stat=qs.map((q,i)=>({i,q,c:T.filter(t=>(t.solved||[]).includes(q.id)).length,o:T.filter(t=>(t.unlocked||[]).includes(q.id)).length}));const st=t=>t.end?'<span class="chip" style="background:#3a9d5d;color:#fff">已破關</span>':t.stage==='intro'||t.stage==='story'?'<span class="chip">看開場中</span>':t.nu>t.ns?'<span class="chip">解題中</span>':'<span class="chip">移動中</span>';return `<div class="row mb" style="gap:12px"><div class="panel" style="flex:1 1 140px;padding:14px"><div class="muted small">參加隊伍</div><b class="num" style="font-size:28px">${T.length}</b></div><div class="panel" style="flex:1 1 140px;padding:14px"><div class="muted small">已破關</div><b class="num" style="font-size:28px">${done}</b></div><div class="panel" style="flex:1 1 140px;padding:14px"><div class="muted small">關卡數</div><b class="num" style="font-size:28px">${n}</b></div></div><div class="panel stack mb"><div class="row" style="justify-content:space-between"><h3 style="margin:0">各隊進度</h3><span class="muted small">即時更新・第 ${r+1} 場</span></div>${T.length?T.map((t,k)=>`<div class="trow"><div class="row" style="justify-content:space-between;gap:8px"><b>${k+1}. ${esc(t.team||'未命名')}</b><span class="row" style="gap:6px">${st(t)}<button class="thumbdel" data-act="delTeam" data-u="${esc(t.id)}" aria-label="刪除這隊紀錄">✕</button></span></div><div class="row" style="gap:10px;flex-wrap:nowrap"><div class="prog" style="flex:1"><i style="width:${n?t.ns/n*100:0}%"></i></div><b class="num">${t.ns}/${n}</b></div><div class="tdots">${qs.map((q,i)=>`<span class="${(t.solved||[]).includes(q.id)?'s':(t.unlocked||[]).includes(q.id)?'o':''}" title="第 ${i+1} 關">${i+1}</span>`).join('')}</div><div class="muted small">用時 <span class="num">${t.start?fmtTime((t.end||Date.now())-t.start):'—'}</span>・最後更新 ${ago(t.updatedAt)}</div></div>`).join(''):'<p class="muted">還沒有隊伍開始遊戲。同學按下「開始遊戲」後就會出現在這裡。</p>'}</div><div class="panel stack"><h3 style="margin:0">各關破解狀況</h3>${stat.map(x=>`<div class="row" style="gap:10px;flex-wrap:nowrap"><span class="num" style="width:26px">${x.i+1}</span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(x.q.title)}</span><span class="muted small" style="white-space:nowrap">進入 ${x.o}・破解 <b>${x.c}</b> 隊</span></div>`).join('')}</div><p class="muted small mt">圓點：灰＝尚未進入、黃＝已進入、綠＝已破解。進度是各隊手機自動回報的；按「基本內容」裡的「重置所有玩家進度」會開始新的一場。</p>`}
 function tQR(g){const base=(S.site.shareUrl||(location.protocol.startsWith('http')?location.origin+location.pathname:'')).split('#')[0],qs=allQs();
   return `<div class="panel stack" style="max-width:820px"><h3>玩家連結</h3><p class="muted small">預設就是這個網站的網址；如果你用了自訂網域或短網址，再貼到這裡。同學掃碼後會直接解鎖該關。</p>
 <div class="row"><input class="inp" id="share" value="${esc(S.site.shareUrl||'')}" placeholder="https://你的帳號.github.io/3sia-game/" style="flex:1 1 260px"><button class="btn" data-act="saveShare">儲存連結</button></div>
@@ -443,6 +450,7 @@ document.addEventListener('click',async e=>{const b=e.target.closest('[data-act]
     if(a==='imgDel')im.splice(k,1);else{const j=k+(+b.dataset.d);if(j<0||j>=im.length)break;[im[k],im[j]]=[im[j],im[k]]}w(()=>qRef(g.id,q.id).update({images:im}));break}
   case 'unpin':w(()=>qRef(g.id,S.aq).update({x:null,y:null}),'已移除圖釘');break;
   case 'clearBoard':w(()=>gRef(g.id).update({boardImg:null}),'已移除主視覺');break;
+  case 'delTeam':{const t=(S.teams||[]).find(x=>x.id===b.dataset.u);if(!t||!await ask('刪除「'+(t.team||'未命名')+'」的紀錄？','只會從這個列表移除；那支手機之後有新進度時會再出現。','刪除'))break;w(()=>S.db.doc('progress/'+g.id+'/teams/'+t.id).delete(),'已刪除');break}
   case 'clearMap':w(()=>gRef(g.id).update({mapId:null}),'已移除地圖');break;
   case 'saveShare':{const u=val('share').trim();if(u&&!/^https:\/\//.test(u)){toast('請貼上 https:// 開頭的連結');break}w(()=>S.db.doc('meta/site').set({...S.site,shareUrl:u}),'已儲存連結');break}
   }});
@@ -468,6 +476,7 @@ function render(){if(S.route==='admin'){const qs=allQs();if(!qs.find(x=>x.id===S
   S.lastKey=key;
   if(window.QRCode)app.querySelectorAll('.qr[data-u]').forEach(el=>{try{new QRCode(el,{text:el.dataset.u,width:168,height:168,correctLevel:QRCode.CorrectLevel.M})}catch(x){el.textContent=el.dataset.u}});
   else app.querySelectorAll('.qr[data-u]').forEach(el=>{el.innerHTML='<p class="small" style="word-break:break-all">'+esc(el.dataset.u)+'</p>'});}
+setInterval(()=>{if(S.route==='admin'&&S.tab==='prog'&&!document.querySelector('#modal.on'))render()},15000);
 setInterval(()=>{const el=document.getElementById('elapsed'),p=S.prog;if(el&&p&&p.start)el.textContent=fmtTime((p.end||Date.now())-p.start)},1000);
 
 /* ---------- subscriptions ---------- */
@@ -475,7 +484,7 @@ function selectGame(id){if(S.route==='admin'||id)S.picked=id;subGame(curGid())}
 function subGame(gid){if(gid===S.gid&&S.subQ)return;S.gid=gid;S.prog=null;S.qs=[];S.secrets={};S.aq=null;if(S.subQ){S.subQ();S.subQ=null}if(S.subS){S.subS();S.subS=null}if(!gid||!S.db)return;
   S.subQ=S.db.collection('games/'+gid+'/questions').onSnapshot(s=>{S.qs=s.docs.map(d=>({...d.data(),id:d.id}));render();tryPending()},e=>console.warn(e));
   subSecrets()}
-function subSecrets(){if(S.subS){S.subS();S.subS=null}S.secrets={};if(!S.canEdit||!S.gid||!S.db)return;S.subS=S.db.collection('secrets/'+S.gid+'/q').onSnapshot(s=>{const o={};s.docs.forEach(d=>o[d.id]=d.data());S.secrets=o;render()},e=>console.warn(e))}
+function subSecrets(){if(S.subS){S.subS();S.subS=null}if(S.subP){S.subP();S.subP=null}S.secrets={};S.teams=[];if(!S.canEdit||!S.gid||!S.db)return;S.subP=S.db.collection('progress/'+S.gid+'/teams').onSnapshot(s=>{S.teams=s.docs.map(d=>({...d.data(),id:d.id}));if(S.route==='admin'&&S.tab==='prog')render()},e=>console.warn(e));S.subS=S.db.collection('secrets/'+S.gid+'/q').onSnapshot(s=>{const o={};s.docs.forEach(d=>o[d.id]=d.data());S.secrets=o;render()},e=>console.warn(e))}
 function route(){const h=decodeURIComponent(location.hash.slice(1));if(h==='admin'){S.route='admin';if(!S.picked)S.picked=S.gid}else{S.route='play';const m=/^u-([A-Za-z0-9]+)-(\d{4})$/.exec(h);if(m)S.pending={qid:m[1],code:m[2]}}
   subGame(curGid());render();tryPending()}
 window.addEventListener('hashchange',route);
@@ -497,7 +506,7 @@ async function fireStore(cfg){const B='https://www.gstatic.com/firebasejs/10.14.
   const admins=(C.admins||[]).map(x=>String(x).toLowerCase().trim());
   if(!C.firebase||!C.firebase.apiKey){S.demo=true;S.db=localStore();S.canEdit=true;S.assets=true}
   else{try{const r=await fireStore(C.firebase);S.db=r.db;S.auth=r.auth;
-      r.auth.AU.onAuthStateChanged(r.auth.auth,u=>{S.authUser=u;S.canEdit=!!(u&&u.email&&admins.includes(u.email.toLowerCase()));S.assets=S.canEdit;subSecrets();render()});
+      r.auth.AU.onAuthStateChanged(r.auth.auth,u=>{if(!u){r.auth.AU.signInAnonymously(r.auth.auth).catch(e=>console.warn('anon',e))}S.uid=u?u.uid:null;u=u&&!u.isAnonymous?u:null;if(S.uid&&S.prog)pushProg();S.authUser=u;S.canEdit=!!(u&&u.email&&admins.includes(u.email.toLowerCase()));S.assets=S.canEdit;subSecrets();render()});
       r.auth.AU.getRedirectResult(r.auth.auth).catch(()=>{})}
     catch(e){console.error(e);clearTimeout(timer);S.noDb=true;S.loaded=true;S.loadErr='無法連線到 Firebase，請確認網路與 config.js 設定。';route();return}}
   const fail=e=>{console.warn(e);clearTimeout(timer);S.loaded=true;if(e?.code==='permission-denied'){S.noDb=true;S.loadErr='資料庫拒絕讀取：請到 Firebase 發佈 firestore.rules 安全規則。'}render()};
