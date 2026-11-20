@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>3SIA 實境解謎</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@600;700&family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
+<link id="gfont" rel="stylesheet" href="">
+<style>
+/* 3SIA 實境解謎遊戲系統（獨立版）— 資料存在 Firebase Firestore；config.js 沒填時進入本機示範模式
+   VOICE: 解謎冒險，一點神秘但讀得清楚；後台則是安靜的工作台
+   IDEA: 一座保險庫——每一題都是一道上鎖的門，用現場遊戲碼打開，再用答案鑰匙解鎖
+   PICTURE: 首頁大型保險庫轉盤；每題一把會動的掛鎖，鑰匙插入、轉動、鎖扣彈開
+   COLOUR and TYPE: 由後台主題決定（預設深石板＋黃銅），Noto Sans TC 900 標題、Chakra Petch 數字
+   LAYOUT: 手機單欄 ≤720px；後台在寬螢幕分成清單＋編輯兩欄 */
+:root{color-scheme:dark;--bg:#0f1a1c;--panel:#182729;--ink:#eef3ef;--accent:#e2a84b;--accent-ink:#1a1206;--radius:16px;--font:'Noto Sans TC',system-ui,sans-serif;
+--muted:color-mix(in srgb,var(--ink) 62%,var(--bg));--line:color-mix(in srgb,var(--ink) 15%,transparent);--soft:color-mix(in srgb,var(--accent) 16%,var(--panel))}
+*{box-sizing:border-box;min-width:0}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg) center/cover fixed;color:var(--ink);font:16px/1.65 var(--font);overflow-x:clip;min-height:100vh}
+button,input,textarea,select{font:inherit;color:inherit}
+.num{font-family:'Chakra Petch',var(--font);font-variant-numeric:tabular-nums}
+.screen{max-width:720px;margin:0 auto;padding:max(18px,env(safe-area-inset-top)) 18px 96px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:20px}
+h1{font-size:clamp(32px,9vw,48px);line-height:1.08;font-weight:900;margin:0 0 10px;text-wrap:balance}
+h2{font-size:26px;line-height:1.2;font-weight:900;margin:0 0 12px;text-wrap:balance}
+h3{font-size:18px;margin:0 0 6px}
+p{margin:0 0 12px}.muted{color:var(--muted)}.small{font-size:13px}
+.prose{font-size:17px;line-height:1.85}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:48px;padding:0 22px;border-radius:999px;border:0;background:var(--accent);color:var(--accent-ink);font-weight:700;cursor:pointer;text-decoration:none}
+.btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
+.btn.wide{width:100%}.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn:focus-visible,.inp:focus-visible,.pin:focus-visible,.qcard:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.inp{width:100%;min-height:48px;padding:10px 14px;border-radius:12px;border:1px solid var(--line);background:color-mix(in srgb,var(--bg) 70%,var(--panel));font-size:16px}
+textarea.inp{min-height:110px;resize:vertical;line-height:1.6}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.stack{display:grid;gap:14px}
+.top{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:18px}
+.top .brand{font-weight:900;letter-spacing:.02em}
+.chip{display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:999px;background:var(--soft);font-size:13px;font-weight:700}
+/* hero vault */
+.hero{display:grid;gap:18px;text-align:center;padding-top:8px}
+.vault{width:min(78vw,340px);aspect-ratio:1;margin:0 auto}
+.vault .wheel{transform-origin:150px 150px;transition:transform 1.4s cubic-bezier(.3,1.4,.5,1)}
+.vault.spin .wheel{transform:rotate(250deg)}
+/* lock */
+.lock{width:120px;height:100px;display:block;margin:0 auto;color:color-mix(in srgb,var(--ink) 80%,var(--bg))}
+.lock .shackle{transition:transform .45s cubic-bezier(.3,1.6,.5,1)}
+.lock .key{transform:translateX(70px);opacity:0;transform-origin:70px 98px}
+.lock.k-in .key{animation:keyIn .5s forwards}
+.lock.k-turn .key{animation:keyIn .01s forwards,keyTurn .35s .05s forwards}
+.lock.open .shackle{transform:translateY(-16px)}
+.lock.bad .lbody{animation:shake .45s}
+.lock.solved .lb{fill:color-mix(in srgb,var(--accent) 55%,var(--panel))}
+@keyframes keyIn{to{transform:translateX(0);opacity:1}}
+@keyframes keyTurn{from{transform:translateX(0) scaleY(1);opacity:1}to{transform:translateX(0) scaleY(-1);opacity:1}}
+@keyframes shake{20%,60%{transform:translateX(-6px)}40%,80%{transform:translateX(6px)}}
+.shake{animation:shake .45s}
+/* board */
+.prog{height:12px;border-radius:99px;background:var(--line);overflow:hidden}.prog>i{display:block;height:100%;background:var(--accent);border-radius:99px;transition:width .6s}
+.map{position:relative;border-radius:var(--radius);overflow:hidden;border:1px solid var(--line);background:var(--panel)}
+.map img{display:block;width:100%;height:auto;user-select:none;-webkit-user-drag:none}
+.pin{position:absolute;transform:translate(-50%,-100%);width:40px;height:48px;border:0;padding:0;background:none;cursor:pointer}
+.pin span{position:absolute;inset:0 0 8px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:var(--panel);border:3px solid var(--ink);box-shadow:0 4px 10px rgba(0,0,0,.35)}
+.pin b{position:relative;display:grid;place-items:center;height:40px;font:700 15px 'Chakra Petch',sans-serif;color:var(--ink)}
+.pin.open span{background:var(--accent);border-color:var(--accent-ink)}.pin.open b{color:var(--accent-ink)}
+.pin.solved span{background:#3a9d5d;border-color:#fff}.pin.solved b{color:#fff}
+.pin.sel span{outline:4px solid #fff}
+.qgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}
+.qcard{position:relative;display:grid;gap:4px;text-align:left;padding:14px;border-radius:var(--radius);background:var(--panel);border:1px solid var(--line);cursor:pointer;min-height:150px}
+.qcard .lock{width:64px;height:54px;margin:0}
+.qcard .n{font:700 13px 'Chakra Petch',sans-serif;color:var(--muted)}
+.qcard.solved{background:var(--soft);border-color:color-mix(in srgb,var(--accent) 40%,transparent)}
+.st{font-size:13px;color:var(--muted)}
+/* question */
+.gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px}
+.gallery button{padding:0;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--panel);cursor:zoom-in;aspect-ratio:4/3}
+.gallery img{width:100%;height:100%;object-fit:cover;display:block}
+.gallery.one{grid-template-columns:1fr}.gallery.one button{aspect-ratio:auto}.gallery.one img{height:auto;max-height:70vh;object-fit:contain}
+.codein{font:700 34px/1 'Chakra Petch',monospace;letter-spacing:.5em;text-align:center;padding-left:.5em}
+.lockstage{display:grid;gap:14px;text-align:center;padding:22px 18px}
+.msg{min-height:24px;font-weight:700}.msg.err{color:#ff8a7a}.msg.ok{color:#7ee2a0}
+.cert{text-align:center;display:grid;gap:12px;padding:28px 20px;border:2px solid var(--accent)}
+.cert .big{font:700 clamp(40px,12vw,64px)/1 'Chakra Petch',sans-serif;color:var(--accent)}
+.navbar{position:fixed;left:0;right:0;bottom:0;display:flex;justify-content:center;gap:8px;padding:10px 12px max(10px,env(safe-area-inset-bottom));background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(8px);border-top:1px solid var(--line);z-index:5}
+.navbar .btn{min-height:44px;padding:0 16px;font-size:15px}
+#modal{position:fixed;inset:0;display:none;place-items:center;background:rgba(0,0,0,.78);z-index:20;padding:16px}
+#modal.on{display:grid}
+#modal .box{max-width:560px;width:100%;background:var(--panel);color:var(--ink);border-radius:var(--radius);padding:20px}
+#modal img{max-width:100%;max-height:85vh;border-radius:10px;display:block;margin:auto}
+#toast{position:fixed;left:50%;bottom:90px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 18px;border-radius:999px;font-weight:700;opacity:0;pointer-events:none;transition:opacity .25s;z-index:30;max-width:90vw;text-align:center}
+#toast.on{opacity:1}
+.center{text-align:center}.mt{margin-top:18px}.mb{margin-bottom:18px}
+/* ===== admin ===== */
+.adm{--bg:light-dark(#f4f5f2,#16181a);--panel:light-dark(#fff,#1f2225);--ink:light-dark(#1b1f22,#e9ecee);--accent:light-dark(#1f5f8b,#7ab8e6);--accent-ink:light-dark(#fff,#0c1a24);--radius:12px;--font:'Noto Sans TC',system-ui,sans-serif;
+background:var(--bg);color:var(--ink);min-height:100vh;font-family:var(--font);color-scheme:light dark}
+:root[data-theme=light] .adm{color-scheme:light}:root[data-theme=dark] .adm{color-scheme:dark}
+.abar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:12px max(3vw,14px);background:var(--panel);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:4}
+.abar .t{font-weight:900;margin-right:6px}
+.abar select{min-height:44px;border-radius:10px;border:1px solid var(--line);background:var(--bg);padding:0 10px;max-width:240px}
+.adm .btn{min-height:44px;padding:0 16px;font-size:15px}
+.btn.danger{background:#b3261e;color:#fff}
+.tabs{display:flex;gap:4px;overflow-x:auto;padding:10px max(3vw,14px) 0;border-bottom:1px solid var(--line)}
+.tabs button{flex:none;min-height:44px;padding:0 16px;border:0;background:none;border-bottom:3px solid transparent;cursor:pointer;font-weight:700;color:var(--muted)}
+.tabs button.on{color:var(--ink);border-color:var(--accent)}
+.amain{padding:18px max(3vw,14px) 80px;max-width:1240px;margin:0 auto}
+.split{display:grid;grid-template-columns:minmax(0,300px) minmax(0,1fr);gap:18px;align-items:start}
+@media(max-width:820px){.split{grid-template-columns:minmax(0,1fr)}}
+label.f{display:grid;gap:6px;font-weight:700;font-size:14px}
+label.f .hint{font-weight:400;color:var(--muted);font-size:13px}
+.qlist{display:grid;gap:6px}
+.qitem{display:flex;gap:10px;align-items:center;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--panel);cursor:pointer;text-align:left;width:100%;min-height:52px}
+.qitem.on{border-color:var(--accent);box-shadow:inset 4px 0 0 var(--accent)}
+.qitem .n{font:700 14px 'Chakra Petch';width:26px;flex:none}
+.qitem .tt{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.thumbs{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px}
+.thumb{border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--bg)}
+.thumb img{width:100%;aspect-ratio:4/3;object-fit:cover;display:block}
+.thumb .row{gap:2px;padding:4px;justify-content:space-between}
+.thumb button{min-height:36px;min-width:36px;border:0;border-radius:8px;background:var(--panel);cursor:pointer}
+.upl{display:inline-flex;align-items:center;min-height:44px;padding:0 16px;border-radius:999px;border:1px dashed var(--accent);color:var(--accent);font-weight:700;cursor:pointer}
+.upl input{display:none}
+.console{font:14px/1.6 ui-monospace,Menlo,monospace;background:#0d1114;color:#cfe8d6;border-radius:10px;padding:12px;max-height:220px;overflow:auto;white-space:pre-wrap}
+.preview{border-radius:14px;padding:22px;background:var(--bg);color:var(--ink);font-family:var(--font);border:1px solid var(--line)}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chips button{min-height:40px;padding:0 14px;border-radius:999px;border:1px solid var(--line);background:var(--panel);cursor:pointer;font-weight:700}
+.sw{display:inline-block;width:14px;height:14px;border-radius:50%;vertical-align:-2px;margin-right:6px;border:1px solid rgba(0,0,0,.2)}
+.qrs{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px}
+.qrcard{background:#fff;color:#111;border-radius:12px;padding:14px;text-align:center;display:grid;gap:6px;justify-items:center}
+.qrcard .code{font:700 26px 'Chakra Petch';letter-spacing:.2em}
+.warn{padding:12px 14px;border-radius:10px;background:color-mix(in srgb,#e0a100 18%,var(--panel));border:1px solid color-mix(in srgb,#e0a100 40%,transparent)}
+.adminlink{font-size:13px;color:var(--muted);text-decoration:underline;background:none;border:0;cursor:pointer;min-height:44px}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+</style>
+</head>
+<body>
+<div id="app"><div class="screen center" style="padding-top:30vh"><p class="muted">載入遊戲中…</p></div></div>
+<div id="modal" role="dialog" aria-modal="true"></div>
+<div id="toast" role="status" aria-live="polite"></div>
+<script src="config.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script>
+{
+const app=document.getElementById('app'),modal=document.getElementById('modal'),toastEl=document.getElementById('toast');
+const PRESETS={
+  '保險庫':{bg:'#0f1a1c',panel:'#182729',ink:'#eef3ef',accent:'#e2a84b',font:'Noto Sans TC',radius:16},
+  '駭客':{bg:'#06120c',panel:'#0d2116',ink:'#d8f5e3',accent:'#3ddc84',font:'Noto Sans TC',radius:6},
+  '偵探':{bg:'#efe4cf',panel:'#fbf5e9',ink:'#2a1e14',accent:'#9b2c1f',font:'Noto Serif TC',radius:4},
+  '深海':{bg:'#062a3a',panel:'#0b3a4f',ink:'#e6f6fb',accent:'#ffb347',font:'Noto Sans TC',radius:20},
+  '霓虹':{bg:'#140d1f',panel:'#21162f',ink:'#f5eefe',accent:'#ff4f9a',font:'Noto Sans TC',radius:14},
+  '校園':{bg:'#fbf8f1',panel:'#ffffff',ink:'#1d2b36',accent:'#1f6feb',font:'Noto Sans TC',radius:18}
+};
+const ALIAS={vault:'保險庫',hacker:'駭客',detective:'偵探',ocean:'深海',neon:'霓虹',school:'校園'};
+const S={db:null,user:null,assets:null,canEdit:false,games:{},site:{},qs:[],secrets:{},gid:null,picked:null,
+  route:'play',view:null,qid:null,tab:'info',aq:null,clog:[],loaded:false,slow:false,noDb:false,pending:null,lastKey:'',busy:false,subQ:null,subS:null};
+
+/* ---------- helpers ---------- */
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const rich=s=>esc(s).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/\n/g,'<br>');
+const BLANK='data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==',IMG={},PEND=new Set();
+function img(id){if(!id)return BLANK;if(IMG[id])return IMG[id];if(S.db&&!PEND.has(id)){PEND.add(id);S.db.doc('images/'+id).get().then(d=>{IMG[id]=d.exists?d.data().data:BLANK;schedRender()}).catch(()=>{})}return BLANK}
+let rq=0;function schedRender(){if(!rq)rq=requestAnimationFrame(()=>{rq=0;render()})}
+const uid=p=>p+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+const code4=()=>String(Math.floor(Math.random()*10000)).padStart(4,'0');
+const norm=(s,ci)=>{s=String(s??'').trim().replace(/\s+/g,' ');return ci?s.toLowerCase():s};
+async function H(s){const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s));return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('')}
+const hashU=(gid,qid,c)=>H(gid+'|'+qid+'|u|'+String(c).trim());
+const hashA=(gid,qid,a,ci)=>H(gid+'|'+qid+'|a|'+norm(a,ci));
+function toast(t){toastEl.textContent=t;toastEl.classList.add('on');clearTimeout(toast.t);toast.t=setTimeout(()=>toastEl.classList.remove('on'),2600)}
+const LS={get(k){try{return JSON.parse(localStorage.getItem(k))}catch(e){return null}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
+const cnv=document.createElement('canvas').getContext('2d');
+function color(v){if(!v)return null;cnv.fillStyle='#010203';cnv.fillStyle=v;const o=cnv.fillStyle;return (o==='#010203'&&!/^#010203$/i.test(v))?null:o}
+function inkFor(hex){const m=/^#?([0-9a-f]{6})$/i.exec(hex||'');if(!m)return '#111';const n=parseInt(m[1],16),l=c=>{c/=255;return c<=.03928?c/12.92:((c+.055)/1.055)**2.4};const L=.2126*l(n>>16)+.7152*l(n>>8&255)+.0722*l(n&255);return L>.42?'#15110a':'#ffffff'}
+function fmtTime(ms){if(!ms||ms<0)ms=0;const s=Math.floor(ms/1000),h=Math.floor(s/3600),m=Math.floor(s%3600/60),x=s%60;return (h?h+':':'')+String(m).padStart(2,'0')+':'+String(x).padStart(2,'0')}
+function ask(title,text,ok='確定'){return new Promise(r=>{modal.innerHTML=`<div class="box"><h3>${esc(title)}</h3><p class="muted">${esc(text)}</p><div class="row" style="justify-content:flex-end"><button class="btn ghost" data-m="0">取消</button><button class="btn" data-m="1">${esc(ok)}</button></div></div>`;modal.classList.add('on');modal.onclick=e=>{const b=e.target.closest('[data-m]');if(!b&&e.target!==modal)return;modal.classList.remove('on');modal.onclick=null;r(b?.dataset.m==='1')}})}
+function zoom(src){modal.innerHTML=`<img src="${src}" alt="">`;modal.classList.add('on');modal.onclick=()=>{modal.classList.remove('on');modal.onclick=null}}
+
+/* ---------- data getters ---------- */
+const gameList=()=>Object.values(S.games).sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+function curGid(){if(S.picked&&S.games[S.picked])return S.picked;const a=S.site.activeGame;if(a&&S.games[a])return a;return gameList()[0]?.id||null}
+const game=()=>S.games[S.gid]||null;
+const allQs=()=>S.qs.slice().sort((a,b)=>(a.order??0)-(b.order??0));
+const playQs=()=>allQs().filter(q=>q.visible!==false);
+function prog(){const g=game();if(!g)return null;const k='3sia:'+g.id+':'+(g.round||0);if(!S.prog||S.prog.k!==k){S.prog=LS.get(k)||{k,team:'',stage:'home',unlocked:[],solved:[],start:0,end:0}}return S.prog}
+const saveProg=()=>{if(S.prog)LS.set(S.prog.k,S.prog)};
+const qState=q=>{const p=prog();return p.solved.includes(q.id)?'solved':p.unlocked.includes(q.id)?'open':'locked'};
+
+/* ---------- theme ---------- */
+function themeOf(g){return {...PRESETS['保險庫'],...(g?.theme||{})}}
+function themeVars(t){return `--bg:${t.bg};--panel:${t.panel};--ink:${t.ink};--accent:${t.accent};--accent-ink:${inkFor(t.accent)};--radius:${t.radius}px;--font:'${t.font}','Noto Sans TC',system-ui,sans-serif`}
+function loadFont(f){if(!f||f==='Noto Sans TC'){return}const href='https://fonts.googleapis.com/css2?family='+encodeURIComponent(f).replace(/%20/g,'+')+':wght@400;700;900&display=swap';const l=document.getElementById('gfont');if(l.getAttribute('href')!==href)l.setAttribute('href',href)}
+function applyTheme(){const g=game(),t=themeOf(g),r=document.documentElement;r.setAttribute('style',themeVars(t));r.style.colorScheme=inkFor(t.bg)==='#ffffff'?'dark':'light';loadFont(t.font);
+  document.body.style.backgroundImage=(S.route!=='admin'&&t.bgId)?`linear-gradient(color-mix(in srgb,${t.bg} 82%,transparent),color-mix(in srgb,${t.bg} 92%,transparent)),url("${img(t.bgId)}")`:'';}
+
+/* ---------- svg pictures ---------- */
+function lockSvg(cls=''){return `<svg class="lock ${cls}" viewBox="0 0 170 140" aria-hidden="true">
+<path class="shackle" d="M40 66V46a30 30 0 0 1 60 0v20" fill="none" stroke="currentColor" stroke-width="13" stroke-linecap="round"/>
+<g class="lbody"><rect class="lb" x="18" y="60" width="104" height="74" rx="16" fill="var(--accent)"/>
+<rect x="18" y="60" width="104" height="16" rx="8" fill="#fff" opacity=".2"/><rect x="18" y="118" width="104" height="16" rx="8" fill="#000" opacity=".12"/>
+<circle cx="70" cy="94" r="10" fill="var(--bg)"/><rect x="65.5" y="96" width="9" height="20" rx="4" fill="var(--bg)"/></g>
+<g class="key"><rect x="70" y="94.5" width="64" height="7" rx="3" fill="var(--ink)"/><path d="M80 101.5h6v8h-6zM92 101.5h5v6h-5z" fill="var(--ink)"/><circle cx="148" cy="98" r="15" fill="none" stroke="var(--ink)" stroke-width="7"/></g></svg>`}
+function vaultSvg(){let ticks='',bolts='';for(let i=0;i<60;i++){const a=i*6*Math.PI/180,r1=i%5?118:112,x1=150+Math.cos(a)*r1,y1=150+Math.sin(a)*r1,x2=150+Math.cos(a)*124,y2=150+Math.sin(a)*124;ticks+=`<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}"/>`}
+  for(let i=0;i<8;i++){const a=(i*45+22.5)*Math.PI/180;bolts+=`<circle cx="${(150+Math.cos(a)*136).toFixed(1)}" cy="${(150+Math.sin(a)*136).toFixed(1)}" r="5"/>`}
+  let spokes='';for(let i=0;i<3;i++)spokes+=`<rect x="144" y="62" width="12" height="176" rx="6" transform="rotate(${i*60} 150 150)"/>`;
+  return `<svg class="vault" id="vault" viewBox="0 0 300 300" aria-hidden="true">
+<circle cx="150" cy="156" r="146" fill="#000" opacity=".25"/><circle cx="150" cy="150" r="146" fill="var(--panel)" stroke="var(--line)" stroke-width="2"/>
+<circle cx="150" cy="150" r="128" fill="color-mix(in srgb,var(--accent) 22%,var(--panel))"/>
+<g fill="var(--accent)">${bolts}</g><g stroke="var(--ink)" stroke-width="2" opacity=".5">${ticks}</g>
+<circle cx="150" cy="150" r="104" fill="var(--bg)" opacity=".55"/>
+<g class="wheel"><g fill="var(--accent)">${spokes}</g><circle cx="150" cy="150" r="96" fill="none" stroke="var(--accent)" stroke-width="10"/>
+<circle cx="150" cy="150" r="34" fill="var(--accent)"/><circle cx="150" cy="150" r="34" fill="#fff" opacity=".15"/><circle cx="150" cy="150" r="12" fill="var(--bg)"/></g>
+<path d="M38 104a128 128 0 0 1 70-70" fill="none" stroke="#fff" stroke-width="5" opacity=".25" stroke-linecap="round"/></svg>`}
+
+/* ================= PLAYER ================= */
+function playerView(){
+  if(S.noDb)return `<div class="screen center" style="padding-top:22vh"><div class="panel"><h2>無法載入遊戲資料</h2><p class="muted">${esc(S.loadErr||'請檢查網路後重新整理。')}</p></div></div>`;
+  const g=game();
+  if(!g)return `<div class="screen center" style="padding-top:22vh"><div class="panel"><h2>${S.loaded?'目前沒有開放中的遊戲':'載入遊戲中…'}</h2>${S.slow&&!S.loaded?'<p class="muted">連線比較慢，請稍候或重新整理。</p>':''}${adminLink()}</div></div>`;
+  const p=prog();let v=S.view||p.stage;if(v==='q'&&!S.qid)v='board';
+  const fn={home:vHome,intro:vIntro,story:vStory,board:vBoard,q:vQuestion,ending:vEnding,clear:vClear}[v]||vHome;
+  return fn(g,p);
+}
+const adminLink=()=>S.canEdit?`<p class="center"><button class="adminlink" data-act="toAdmin">進入後台編輯</button></p>`:'';
+function topbar(g,p){const qs=playQs(),n=qs.filter(q=>p.solved.includes(q.id)).length;return `<div class="top"><span class="brand">${esc(g.title)}</span><span class="chip num">${n} / ${qs.length}</span></div>`}
+function navbar(cur){const b=(v,t)=>`<button class="btn ${cur===v?'':'ghost'}" data-act="view" data-v="${v}">${t}</button>`;return `<nav class="navbar">${b('board','任務')}${b('intro','說明')}${b('story','劇情')}</nav>`}
+function vHome(g,p){const started=p.stage!=='home';return `<div class="screen"><div class="hero">${vaultSvg()}
+<div><h1>${esc(g.title)}</h1>${g.subtitle?`<p class="muted prose">${rich(g.subtitle)}</p>`:''}</div>
+<div class="panel stack" style="text-align:left">${started?`<p class="center">隊伍 <b>${esc(p.team||'未命名')}</b> 的進度已保存</p><button class="btn wide" data-act="resume">繼續遊戲</button>`:
+`<label class="f">隊伍名稱<input class="inp" id="team" maxlength="24" placeholder="例如：第三小隊" autocomplete="off"></label><button class="btn wide" data-act="start">開始遊戲</button>`}</div>
+${adminLink()}</div></div>`}
+function vIntro(g,p){const first=p.stage==='intro';return `<div class="screen">${topbar(g,p)}<div class="panel"><h2>遊戲說明</h2><div class="prose">${rich(g.instructions||'（尚未填寫遊戲說明）')}</div></div>
+<div class="mt">${first?`<button class="btn wide" data-act="stage" data-v="story">我了解了，看開頭劇情</button>`:''}</div></div>${first?'':navbar('intro')}`}
+function vStory(g,p){const first=p.stage==='story';return `<div class="screen">${topbar(g,p)}<div class="panel"><h2>序章</h2><div class="prose">${rich(g.opening||'（尚未填寫開頭劇情）')}</div></div>
+<div class="mt">${first?`<button class="btn wide" data-act="stage" data-v="board">接受任務，前往地圖</button>`:''}</div></div>${first?'':navbar('story')}`}
+function vBoard(g,p){const qs=playQs(),n=qs.filter(q=>p.solved.includes(q.id)).length,all=qs.length&&n===qs.length;
+  const map=g.mapId?`<div class="map mb">${'<img src="'+img(g.mapId)+'" alt="遊戲地圖">'}${qs.map((q,i)=>q.x==null?'':`<button class="pin ${qState(q)}" style="left:${q.x}%;top:${q.y}%" data-act="openQ" data-q="${q.id}" aria-label="第 ${i+1} 關"><span></span><b>${i+1}</b></button>`).join('')}</div>`:'';
+  return `<div class="screen">${topbar(g,p)}
+<div class="mb"><div class="row" style="justify-content:space-between;margin-bottom:8px"><b>破解進度</b><span class="muted small">用時 <span class="num" id="elapsed">${fmtTime((p.end||Date.now())-p.start)}</span></span></div><div class="prog"><i style="width:${qs.length?n/qs.length*100:0}%"></i></div></div>
+${all?`<div class="panel mb center stack"><b>所有鎖都打開了</b><button class="btn wide" data-act="stage" data-v="ending">觀看結局</button></div>`:''}
+${map}<div class="qgrid">${qs.map((q,i)=>{const s=qState(q);return `<button class="qcard ${s}" data-act="openQ" data-q="${q.id}">${lockSvg(s==='solved'?'open solved':'')}<span class="n">第 ${i+1} 關</span><b>${esc(s==='locked'?(q.location||'未知地點'):q.title)}</b><span class="st">${s==='solved'?'已破解':s==='open'?'已進入・待解題':'到現場輸入遊戲碼'}</span></button>`}).join('')||'<p class="muted">關卡尚未開放</p>'}</div></div>${navbar('board')}`}
+function vQuestion(g,p){const qs=playQs(),i=qs.findIndex(q=>q.id===S.qid),q=qs[i];if(!q){S.view='board';return vBoard(g,p)}
+  const s=qState(q),head=`<div class="top"><button class="btn ghost" data-act="view" data-v="board">← 地圖</button><span class="chip num">第 ${i+1} 關</span></div>`;
+  if(s==='locked')return `<div class="screen">${head}<div class="panel lockstage"><div id="lk">${lockSvg()}</div><h2>${esc(q.location||'第 '+(i+1)+' 關')}</h2>
+<p class="muted">這一關還鎖著。到現場找到遊戲碼，輸入 4 位數字開門。</p>
+<input class="inp codein num" id="ucode" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off" aria-label="4 位數遊戲碼">
+<div class="msg" id="umsg"></div><button class="btn wide" data-act="unlock" data-q="${q.id}">開門</button></div></div>`;
+  const imgs=(q.images||[]);
+  return `<div class="screen">${head}<h2>${esc(q.title)}</h2>${q.location?`<p class="muted small">📍 ${esc(q.location)}</p>`:''}
+${q.story?`<div class="panel mb"><div class="prose">${rich(q.story)}</div></div>`:''}
+${imgs.length?`<div class="gallery mb ${imgs.length===1?'one':''}">${imgs.map(id=>`<button data-act="zoom" data-src="${img(id)}"><img src="${img(id)}" alt="題目圖片" loading="lazy"></button>`).join('')}</div>`:''}
+${q.prompt?`<div class="panel mb" style="border-color:var(--accent)"><h3>題目</h3><div class="prose">${rich(q.prompt)}</div></div>`:''}
+${q.hint?`<details class="panel mb"><summary style="cursor:pointer;font-weight:700;min-height:28px">需要提示嗎？</summary><div class="prose mt">${rich(q.hint)}</div></details>`:''}
+<div class="panel lockstage"><div id="lk">${lockSvg(s==='solved'?'open solved k-turn':'')}</div>
+${s==='solved'?`<b class="msg ok">這道鎖已經解開了</b><button class="btn wide" data-act="view" data-v="board">回到地圖</button>`:
+`<p class="muted">把解題碼當作鑰匙插進鎖裡</p><input class="inp" id="ans" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="輸入解題碼">
+<div class="msg" id="amsg"></div><button class="btn wide" data-act="answer" data-q="${q.id}" ${q.answerHash?'':'disabled'}>${q.answerHash?'插入鑰匙':'此題尚未設定答案'}</button>`}</div></div>`}
+function vEnding(g,p){return `<div class="screen">${topbar(g,p)}<div class="panel"><h2>終章</h2><div class="prose">${rich(g.ending||'（尚未填寫結尾劇情）')}</div></div><div class="mt"><button class="btn wide" data-act="stage" data-v="clear">領取破關證明</button></div></div>`}
+function vClear(g,p){const d=new Date(p.end||Date.now());return `<div class="screen"><div class="hero">${vaultSvg().replace('class="vault"','class="vault spin"')}
+<div class="panel cert"><span class="chip" style="justify-self:center">MISSION COMPLETE</span><h1>${esc(g.clearTitle||'恭喜破關')}</h1>
+<p class="prose">${rich(g.clearText||'')}</p><div><div class="muted small">隊伍</div><b style="font-size:22px">${esc(p.team||'未命名')}</b></div>
+<div><div class="muted small">總用時</div><div class="big">${fmtTime(p.end-p.start)}</div></div>
+<div class="muted small num">${d.getFullYear()}/${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}・破解 ${p.solved.length} 道鎖</div></div>
+<button class="btn ghost" data-act="view" data-v="board">回顧關卡</button></div></div>`}
+
+/* player actions */
+function setStage(v){const p=prog();if(v==='ending'&&!p.end)p.end=Date.now();const order=['home','intro','story','board','ending','clear'];if(order.indexOf(v)>order.indexOf(p.stage))p.stage=v;S.view=v;saveProg();render();scrollTo(0,0)}
+async function doUnlock(qid){const el=document.getElementById('ucode'),c=(el?.value||'').trim(),m=document.getElementById('umsg');
+  if(!/^\d{4}$/.test(c)){m.className='msg err';m.textContent='請輸入 4 位數字';el?.classList.add('shake');setTimeout(()=>el?.classList.remove('shake'),500);return}
+  const q=S.qs.find(x=>x.id===qid);if(!q)return;const ok=(await hashU(S.gid,qid,c))===q.unlockHash;const lk=document.querySelector('#lk .lock');
+  if(!ok){m.className='msg err';m.textContent='遊戲碼不正確，再找找看';lk?.classList.add('bad');setTimeout(()=>lk?.classList.remove('bad'),500);return}
+  m.className='msg ok';m.textContent='門開了！';lk?.classList.add('open');const p=prog();if(!p.unlocked.includes(qid))p.unlocked.push(qid);saveProg();setTimeout(render,700)}
+async function doAnswer(qid){const el=document.getElementById('ans'),a=el?.value||'',m=document.getElementById('amsg');if(!a.trim()){m.className='msg err';m.textContent='先輸入解題碼';return}
+  const q=S.qs.find(x=>x.id===qid);if(!q||S.busy)return;S.busy=true;const ok=(await hashA(S.gid,qid,a,q.ci!==false))===q.answerHash;const lk=document.querySelector('#lk .lock');
+  lk.classList.remove('k-in','k-turn','bad');void lk.getBoundingClientRect();lk.classList.add('k-in');m.className='msg';m.textContent='鑰匙插入中…';
+  setTimeout(()=>{if(!ok){lk.classList.add('bad');m.className='msg err';m.textContent='鑰匙轉不動，答案不對';setTimeout(()=>{lk.classList.remove('k-in','bad');S.busy=false},700);return}
+    lk.classList.add('k-turn');setTimeout(()=>{lk.classList.add('open','solved');m.className='msg ok';m.textContent='喀！鎖打開了';
+      const p=prog();if(!p.solved.includes(qid))p.solved.push(qid);if(!p.unlocked.includes(qid))p.unlocked.push(qid);
+      const qs=playQs();if(qs.every(x=>p.solved.includes(x.id))&&!p.end){p.end=Date.now()}saveProg();
+      setTimeout(()=>{S.busy=false;if(p.end&&qs.every(x=>p.solved.includes(x.id))){setStage('ending')}else{S.view='board';render();toast('解鎖成功！前往下一個地點')}},1300)},420)},560)}
+async function tryPending(){const pd=S.pending;if(!pd||!S.gid||!S.qs.length)return;S.pending=null;
+  try{history.replaceState(null,'',location.pathname+location.search)}catch(e){}
+  const q=S.qs.find(x=>x.id===pd.qid);if(!q){toast('找不到這個關卡');return}
+  if((await hashU(S.gid,q.id,pd.code))!==q.unlockHash){toast('這個 QR 碼已失效');return}
+  const p=prog();if(!p.unlocked.includes(q.id))p.unlocked.push(q.id);saveProg();
+  if(['home','intro','story'].includes(p.stage)){toast('已解鎖一個關卡，先完成開場吧');render();return}
+  S.view='q';S.qid=q.id;render();toast('門開了！')}
+
+/* ================= ADMIN ================= */
+function adminView(){
+  if(!S.canEdit)return `<div class="adm"><div class="screen center" style="padding-top:18vh"><div class="panel stack"><h2>遊戲後台</h2>
+${S.authUser?`<p class="muted">目前登入：${esc(S.authUser.email)}<br>這個帳號不在管理員名單中（config.js 的 admins）。</p><button class="btn ghost" data-act="logout">換一個帳號</button>`:
+`<p class="muted">用管理員的 Google 帳號登入，才能編輯遊戲。</p><button class="btn" data-act="login" ${S.auth?'':'disabled'}>用 Google 登入</button>`}
+<button class="btn ghost" data-act="toPlay">回到遊戲</button></div></div></div>`;
+  const g=game(),gs=gameList(),act=S.site.activeGame;
+  const tabs=[['info','基本內容'],['style','風格'],['qs',`題目 ${g?allQs().length:0}/15`],['map','地圖'],['qr','QR 碼與連結']];
+  return `<div class="adm"><header class="abar"><span class="t">3SIA 遊戲後台</span>
+${gs.length?`<select id="a-game" aria-label="選擇遊戲">${gs.map(x=>`<option value="${x.id}" ${x.id===S.gid?'selected':''}>${esc(x.title)}${x.id===act?'（開放中）':''}</option>`).join('')}</select>`:''}
+<button class="btn" data-act="newGame">＋ 新遊戲</button>${g?`<button class="btn ghost" data-act="dupGame">複製</button>
+${g.id===act?'<span class="chip">玩家目前看到這個遊戲</span>':`<button class="btn ghost" data-act="setActive">設為開放中</button>`}
+<button class="btn ghost" data-act="toPlay">玩家畫面</button><button class="btn danger" data-act="delGame">刪除</button>`:''}
+${S.demo?'<span class="chip">示範模式・資料只存在這台電腦</span>':`<button class="btn ghost" data-act="logout" title="${esc(S.authUser?.email||'')}">登出</button>`}</header>
+${g?`<nav class="tabs">${tabs.map(([k,t])=>`<button class="${S.tab===k?'on':''}" data-act="tab" data-v="${k}">${t}</button>`).join('')}</nav>
+<main class="amain">${({info:tInfo,style:tStyle,qs:tQs,map:tMap,qr:tQR}[S.tab]||tInfo)(g)}</main>`:
+`<main class="amain"><div class="panel center"><h2>還沒有任何遊戲</h2><p class="muted">按上方「新遊戲」建立第一個實境解謎，或先載入範例看看。</p><button class="btn" data-act="seed">載入範例遊戲</button></div></main>`}</div>`}
+const fld=(id,label,val,opt={})=>`<label class="f">${label}${opt.hint?`<span class="hint">${opt.hint}</span>`:''}${opt.area?`<textarea class="inp" id="${id}" rows="${opt.rows||5}">${esc(val)}</textarea>`:`<input class="inp" id="${id}" value="${esc(val)}" ${opt.attr||''}>`}</label>`;
+function tInfo(g){return `<div class="panel stack" style="max-width:820px">
+${fld('gi-title','遊戲名稱',g.title)}${fld('gi-subtitle','主頁副標題',g.subtitle,{area:1,rows:2})}
+${fld('gi-instructions','遊戲說明',g.instructions,{area:1,rows:7,hint:'換行會照樣顯示；**文字** 會變粗體'})}
+${fld('gi-opening','開頭劇情',g.opening,{area:1,rows:8})}${fld('gi-ending','結尾劇情',g.ending,{area:1,rows:8,hint:'全部題目破解後出現'})}
+${fld('gi-clearTitle','破關頁標題',g.clearTitle||'恭喜破關')}${fld('gi-clearText','破關頁文字',g.clearText,{area:1,rows:3})}
+<div class="row"><button class="btn" data-act="saveInfo">儲存內容</button><span class="muted small">儲存後，玩家畫面會即時更新</span></div></div>
+<div class="panel stack mt" style="max-width:820px"><h3>重置玩家進度</h3><p class="muted small">活動要重新開始時使用：所有裝置上的進度會歸零（目前第 ${(g.round||0)+1} 場）。</p><div><button class="btn danger" data-act="resetRound">重置所有玩家進度</button></div></div>`}
+function tStyle(g){const t=themeOf(g);return `<div class="split"><div class="stack">
+<div class="panel stack"><h3>風格指令</h3><p class="muted small">一行一個指令，也可以用分號串起來。輸入「說明」看全部指令。</p>
+<textarea class="inp" id="cmd" rows="3" placeholder="主題 駭客&#10;主色 #ff6b35&#10;字體 Noto Serif TC" style="font-family:ui-monospace,monospace"></textarea>
+<div class="row"><button class="btn" data-act="runCmd">執行</button></div><div class="console" id="clog">${esc(S.clog.join('\n')||'> 等待指令…')}</div></div>
+<div class="panel stack"><h3>快速主題</h3><div class="chips">${Object.entries(PRESETS).map(([k,v])=>`<button data-act="preset" data-v="${k}"><span class="sw" style="background:${v.accent}"></span>${k}</button>`).join('')}</div>
+<h3 class="mt">背景圖片</h3><div class="row"><label class="upl">上傳背景圖<input type="file" accept="image/*" data-up="bg"></label>${t.bgId?'<button class="btn ghost" data-act="clearBg">移除背景圖</button>':''}</div></div></div>
+<div class="stack"><b>預覽（玩家看到的樣子）</b><div class="preview stack" style="${themeVars(t)};${t.bgId?`background:linear-gradient(color-mix(in srgb,${t.bg} 85%,transparent),color-mix(in srgb,${t.bg} 85%,transparent)),url("${img(t.bgId)}") center/cover`:''}">
+<h1 style="font-size:34px">${esc(g.title)}</h1><div class="panel row" style="justify-content:space-between">${lockSvg()}<div style="flex:1"><b>第 1 關</b><p class="st" style="margin:0">到現場輸入遊戲碼</p></div></div>
+<button class="btn">開始遊戲</button></div>
+<p class="muted small">目前：背景 ${t.bg}・面板 ${t.panel}・文字 ${t.ink}・主色 ${t.accent}・字體 ${esc(t.font)}・圓角 ${t.radius}</p></div></div>`}
+function tQs(g){const qs=allQs(),q=qs.find(x=>x.id===S.aq)||qs[0];if(q)S.aq=q.id;const sec=q?S.secrets[q.id]||{}:{};
+  const list=`<div class="stack"><div class="qlist">${qs.map((x,i)=>`<button class="qitem ${x.id===S.aq?'on':''}" data-act="selQ" data-q="${x.id}"><span class="n">${i+1}</span><span class="tt">${esc(x.title||'未命名')}</span>${x.visible===false?'<span class="chip">隱藏</span>':''}${S.secrets[x.id]?.answer?'':'<span class="chip">缺答案</span>'}</button>`).join('')}</div>
+<button class="btn ghost" data-act="addQ" ${qs.length>=15?'disabled':''}>＋ 新增題目</button>${qs.length<3?'<p class="warn small">建議至少 3 題（目前 '+qs.length+' 題）</p>':''}${qs.length>=15?'<p class="muted small">已達上限 15 題</p>':''}</div>`;
+  if(!q)return `<div class="split">${list}<div class="panel muted">新增一題開始編輯</div></div>`;
+  const i=qs.indexOf(q),imgs=q.images||[];
+  return `<div class="split">${list}<div class="panel stack"><div class="row" style="justify-content:space-between"><h3>第 ${i+1} 題</h3><div class="row">
+<button class="btn ghost" data-act="moveQ" data-d="-1" ${i===0?'disabled':''} aria-label="上移">↑</button><button class="btn ghost" data-act="moveQ" data-d="1" ${i===qs.length-1?'disabled':''} aria-label="下移">↓</button><button class="btn danger" data-act="delQ">刪除</button></div></div>
+${fld('qf-title','題目名稱',q.title)}${fld('qf-loc','地點名稱',q.location,{hint:'鎖住時玩家只會看到地點，例如「圖書館二樓」'})}
+${fld('qf-story','題目劇情',q.story,{area:1,rows:6})}${fld('qf-prompt','資安題目內容',q.prompt,{area:1,rows:6})}${fld('qf-hint','提示（可留空）',q.hint,{area:1,rows:3})}
+<div class="row" style="align-items:end"><div style="flex:1 1 160px">${fld('qf-unlock','現場遊戲碼（4 位數）',sec.unlock??'',{attr:'inputmode="numeric" maxlength="4"'})}</div><button class="btn ghost" data-act="randCode">隨機產生</button></div>
+${fld('qf-answer','解題碼（答案）',sec.answer??'',{hint:'只會以雜湊形式提供給玩家，看不到明文'})}
+<label class="row"><input type="checkbox" id="qf-ci" ${q.ci!==false?'checked':''} style="width:22px;height:22px"> 答案不分大小寫、忽略前後空白</label>
+<label class="row"><input type="checkbox" id="qf-vis" ${q.visible!==false?'checked':''} style="width:22px;height:22px"> 在玩家畫面顯示這一題</label>
+<div class="stack"><b>題目圖片（${imgs.length} 張）</b><div class="thumbs">${imgs.map((id,k)=>`<div class="thumb"><img src="${img(id)}" alt=""><div class="row"><button data-act="imgMove" data-k="${k}" data-d="-1" aria-label="左移">←</button><button data-act="imgDel" data-k="${k}" aria-label="刪除">✕</button><button data-act="imgMove" data-k="${k}" data-d="1" aria-label="右移">→</button></div></div>`).join('')}</div>
+${S.assets?`<div><label class="upl">＋ 上傳圖片（可多選）<input type="file" accept="image/*" multiple data-up="qimg"></label></div>`:'<p class="muted small">這個檢視無法上傳圖片</p>'}</div>
+<div class="row"><button class="btn" data-act="saveQ">儲存這一題</button><span class="muted small">圖片上傳後會立即生效；文字要按儲存</span></div></div></div>`}
+function tMap(g){const qs=allQs(),sel=qs.find(x=>x.id===S.aq)||qs[0];if(sel)S.aq=sel.id;
+  return `<div class="split"><div class="panel stack"><h3>放置題目到地圖</h3><p class="muted small">先選一題，再點地圖上的位置。玩家會看到編號圖釘，鎖住、進入、破解狀態會變色。</p>
+<div class="qlist">${qs.map((x,i)=>`<button class="qitem ${x.id===S.aq?'on':''}" data-act="selQ" data-q="${x.id}"><span class="n">${i+1}</span><span class="tt">${esc(x.title||'未命名')}</span><span class="chip">${x.x==null?'未放置':'已放置'}</span></button>`).join('')}</div>
+${sel&&sel.x!=null?`<button class="btn ghost" data-act="unpin">移除這題的圖釘</button>`:''}
+<div class="row">${S.assets?`<label class="upl">${g.mapId?'更換地圖':'上傳地圖圖片'}<input type="file" accept="image/*" data-up="map"></label>`:''}${g.mapId?'<button class="btn ghost" data-act="clearMap">移除地圖</button>':''}</div></div>
+<div>${g.mapId?`<div class="map" id="amap" style="cursor:crosshair"><img src="${img(g.mapId)}" alt="地圖" draggable="false">${qs.map((x,i)=>x.x==null?'':`<span class="pin ${x.id===S.aq?'sel open':''}" style="left:${x.x}%;top:${x.y}%;pointer-events:none"><span></span><b>${i+1}</b></span>`).join('')}</div>`:'<div class="panel muted center" style="padding:60px 20px">上傳一張校園地圖或場地平面圖</div>'}</div></div>`}
+function tQR(g){const base=(S.site.shareUrl||(location.protocol.startsWith('http')?location.origin+location.pathname:'')).split('#')[0],qs=allQs();
+  return `<div class="panel stack" style="max-width:820px"><h3>玩家連結</h3><p class="muted small">預設就是這個網站的網址；如果你用了自訂網域或短網址，再貼到這裡。同學掃碼後會直接解鎖該關。</p>
+<div class="row"><input class="inp" id="share" value="${esc(S.site.shareUrl||'')}" placeholder="https://你的帳號.github.io/3sia-game/" style="flex:1 1 260px"><button class="btn" data-act="saveShare">儲存連結</button></div>
+${base?`<div class="row"><div class="qrcard"><div class="qr" data-u="${esc(base)}"></div><b>遊戲入口</b></div></div>`:''}</div>
+<h3 class="mt">每關現場卡</h3><p class="muted small">截圖或拍下來印出，貼在各關地點。沒有手機掃碼的同學，也可以手動輸入下方的 4 位數。</p>
+${!base?'<p class="warn">網站放上網路後才會產生 QR 碼（本機開檔時請先填入正式網址）。</p>':''}
+<div class="qrs">${qs.map((q,i)=>{const c=S.secrets[q.id]?.unlock;return `<div class="qrcard">${base&&c?`<div class="qr" data-u="${esc(base+'#u-'+q.id+'-'+c)}"></div>`:''}<b>第 ${i+1} 關・${esc(q.location||q.title)}</b><span class="code">${c||'未設定'}</span></div>`}).join('')}</div>`}
+
+/* admin writes */
+const gRef=id=>S.db.doc('games/'+id),qRef=(g,q)=>S.db.doc('games/'+g+'/questions/'+q),sRef=(g,q)=>S.db.doc('secrets/'+g+'/q/'+q);
+async function w(fn,okMsg){if(S.busy)return;S.busy=true;try{await fn();if(okMsg)toast(okMsg)}catch(e){console.error(e);toast(e?.code==='permission-denied'?'沒有權限：請確認登入帳號在管理員名單，且已發佈安全規則':e?.code==='quota'?'示範模式儲存空間已滿（圖片太多）':'儲存失敗，請稍後再試')}finally{S.busy=false}}
+const val=id=>document.getElementById(id)?.value??'';
+function newGameDoc(id,title){return {id,title,subtitle:'',instructions:'',opening:'',ending:'',clearTitle:'恭喜破關',clearText:'',theme:{...PRESETS['保險庫'],preset:'保險庫'},round:0,mapId:null,createdAt:Date.now()}}
+async function writeQ(gid,qid,data,sec){const c=sec.unlock??'',a=sec.answer??'',ci=data.ci!==false;
+  const full={...data,id:qid,unlockHash:/^\d{4}$/.test(c)?await hashU(gid,qid,c):'',answerHash:String(a).trim()?await hashA(gid,qid,a,ci):''};
+  await qRef(gid,qid).set(full);await sRef(gid,qid).set({unlock:c,answer:a})}
+async function seedSample(){const id=uid('g');await gRef(id).set({...newGameDoc(id,'【範例】消失的伺服器金鑰'),
+  subtitle:'學校主機被神秘駭客上了四道鎖，只有你們能把金鑰找回來。\n（這是內建的範例遊戲，可以直接修改或複製成新遊戲）',
+  instructions:'1. 每一關都在校園裡的某個地點，地圖上的圖釘會告訴你大概位置。\n2. 到達現場後，找到貼在那裡的 **4 位數遊戲碼**（或掃 QR 碼），輸入後才能看到題目。\n3. 解開資安題目，把得到的 **解題碼** 插進鎖裡。\n4. 四道鎖全部打開，就能看到真相並領取破關證明。\n\n小提醒：答案不分大小寫；卡關時可以打開「提示」。',
+  opening:'星期五傍晚，資訊組老師發現學校的伺服器停擺了。螢幕上只留下一行字：\n\n**「想要拿回金鑰？先通過我的四道鎖。——Shadow」**\n\n老師把這個任務交給了你們。Shadow 把線索藏在校園四個角落，每個地方都需要一點資安知識才能破解。\n\n時間不多了，出發吧！',
+  ending:'最後一道鎖應聲而開，伺服器重新啟動。螢幕上出現 Shadow 的最後訊息：\n\n「不錯嘛。其實我是想讓大家知道：**密碼要夠強、編碼不等於加密、看到可疑連結要先停一下。** 你們都做到了。」\n\n原來 Shadow 就是去年畢業的學長姐。歡迎加入資安守護者的行列！',
+  clearTitle:'金鑰奪回成功',clearText:'你們用資安知識打開了全部的鎖。'});
+ const Q=[['凱撒的密信','圖書館入口','圖書館的公告欄上，貼著一張寫滿奇怪字母的紙條，角落畫著一頂羅馬頭盔。','凱撒密碼把每個字母往後移了 3 位（A→D、B→E…）。\n\n請還原這段密文：**VHFXULWB**','反過來，每個字母往前移 3 位：V→S。','1294','SECURITY'],
+  ['看似加密的字串','電腦教室','電腦教室的白板上寫著一串亂碼，旁邊寫著「這很安全，因為看不懂」。','把下面這串文字解碼，得到的旗標就是解題碼：\n\n**QUlTM3tiYXNlNjRfaXNfbm90X2VuY3J5cHRpb259**','這是一種很常見的「編碼」，名字和 64 有關。','5807','AIS3{base64_is_not_encryption}'],
+  ['十六進位的密語','福利社','福利社收銀機的發票上，印著四組奇怪的數字。','每組數字都是一個字母的 ASCII 碼（十六進位）：\n\n**48 41 43 4B**\n\n轉成英文字母就是解題碼。','0x41 是大寫的 A。','3361','HACK'],
+  ['真假登入頁','學務處','學務處的電腦開著一封信：「你的帳號即將停用，請立即點擊連結登入」。信裡有四個連結。','哪一個才是真正的網址？請回答選項字母。\n\nA. https://school-login.edu-tw.com\nB. https://login.school.edu.tw\nC. https://login.school.edu.tw.verify-account.net\nD. http://schoo1.edu.tw/login','看網址真正的「網域」：最右邊的部分才算數。','7742','B']];
+ for(let i=0;i<Q.length;i++){const [title,location,story,prompt,hint,c,a]=Q[i];await writeQ(id,uid('q'),{...blankQ(i),title,location,story,prompt,hint},{unlock:c,answer:a})}
+ if(!S.site.activeGame||!S.games[S.site.activeGame])await S.db.doc('meta/site').set({...S.site,activeGame:id});return id}
+const blankQ=(o)=>({order:o,title:'第 '+(o+1)+' 關',location:'',story:'',prompt:'',hint:'',images:[],x:null,y:null,visible:true,ci:true});
+async function shrink(f,max=1800){try{if(!/^image\/(jpeg|png|webp)$/.test(f.type))return f;const b=await createImageBitmap(f),s=Math.min(1,max/Math.max(b.width,b.height));if(s===1&&f.size<1.8e6)return f;
+  const c=document.createElement('canvas');c.width=Math.round(b.width*s);c.height=Math.round(b.height*s);c.getContext('2d').drawImage(b,0,0,c.width,c.height);const t=f.type==='image/png'?'image/png':'image/jpeg';return await new Promise(r=>c.toBlob(x=>r(x||f),t,.86))}catch(e){return f}}
+async function toDataURL(f){const b=await createImageBitmap(f);let max=1400,q=.82,u='';for(let t=0;t<8;t++){const s=Math.min(1,max/Math.max(b.width,b.height)),c=document.createElement('canvas');c.width=Math.round(b.width*s);c.height=Math.round(b.height*s);const x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,c.width,c.height);x.drawImage(b,0,0,c.width,c.height);u=c.toDataURL('image/jpeg',q);if(u.length<850000)break;if(q>.5)q-=.12;else max=Math.round(max*.8)}return u}
+async function upload(files){const out=[];for(const f of files){const u=await toDataURL(f),id=uid('i');await S.db.doc('images/'+id).set({data:u,gid:S.gid,createdAt:Date.now()});IMG[id]=u;out.push(id)}return out}
+function runCommands(text){const g=game();if(!g)return;const t={...themeOf(g)};const log=[];let title=null;
+  const lines=text.split(/[\n;；]/).map(s=>s.trim()).filter(Boolean);
+  for(const ln of lines){const [c0,...rest]=ln.split(/\s+/);const c=c0.toLowerCase(),arg=rest.join(' ').trim();log.push('> '+ln);
+    if(['說明','help','?'].includes(c)){log.push('主題 <保險庫|駭客|偵探|深海|霓虹|校園>\n主色 / 背景 / 面板 / 文字 <顏色，如 #ff6b35 或 tomato>\n字體 <Google 字型名稱，如 Noto Serif TC、Zen Maru Gothic>\n圓角 <0–32>\n標題 <新的遊戲名稱>\n重設');continue}
+    if(['主題','theme'].includes(c)){const k=PRESETS[arg]?arg:ALIAS[arg.toLowerCase()];if(!k){log.push('  ✗ 沒有這個主題');continue}Object.assign(t,PRESETS[k],{preset:k});log.push('  ✓ 套用主題 '+k);continue}
+    const ck={'主色':'accent','accent':'accent','背景':'bg','bg':'bg','面板':'panel','panel':'panel','文字':'ink','ink':'ink'}[c];
+    if(ck){const v=color(arg);if(!v){log.push('  ✗ 看不懂這個顏色');continue}t[ck]=v;log.push('  ✓ '+c0+' → '+v);continue}
+    if(['字體','font'].includes(c)){if(!/^[A-Za-z0-9 ]{2,40}$/.test(arg)){log.push('  ✗ 請輸入 Google Fonts 的英文字型名稱');continue}t.font=arg;log.push('  ✓ 字體 → '+arg);continue}
+    if(['圓角','radius'].includes(c)){const n=parseInt(arg,10);if(isNaN(n)){log.push('  ✗ 請輸入數字');continue}t.radius=Math.max(0,Math.min(32,n));log.push('  ✓ 圓角 → '+t.radius);continue}
+    if(['標題','title'].includes(c)){if(!arg){log.push('  ✗ 請輸入名稱');continue}title=arg.slice(0,60);log.push('  ✓ 遊戲名稱 → '+title);continue}
+    if(['重設','reset'].includes(c)){Object.assign(t,PRESETS['保險庫'],{preset:'保險庫',bgId:null});log.push('  ✓ 已重設為預設風格');continue}
+    log.push('  ✗ 不認得「'+c0+'」，輸入「說明」看指令')}
+  S.clog=S.clog.concat(log).slice(-60);const data={theme:t};if(title)data.title=title;
+  w(()=>gRef(g.id).update(data),'風格已更新').then(()=>{const el=document.getElementById('cmd');if(el)el.value='';render();const cl=document.getElementById('clog');if(cl)cl.scrollTop=cl.scrollHeight})}
+
+/* ---------- events ---------- */
+document.addEventListener('click',async e=>{const b=e.target.closest('[data-act]');
+  const am=e.target.closest('#amap');if(am&&!b&&S.route==='admin'){const q=S.qs.find(x=>x.id===S.aq);if(!q)return;const r=am.getBoundingClientRect();const x=+((e.clientX-r.left)/r.width*100).toFixed(2),y=+((e.clientY-r.top)/r.height*100).toFixed(2);
+    w(()=>qRef(S.gid,q.id).update({x,y}),'已放置第 '+(allQs().indexOf(q)+1)+' 題');return}
+  if(!b)return;const a=b.dataset.act,g=game();
+  switch(a){
+  case 'start':{const p=prog();p.team=(val('team')||'').trim().slice(0,24);p.start=Date.now();document.getElementById('vault')?.classList.add('spin');setTimeout(()=>setStage('intro'),900);break}
+  case 'resume':{const p=prog();S.view=p.stage==='home'?'intro':p.stage;render();break}
+  case 'stage':setStage(b.dataset.v);break;
+  case 'view':S.view=b.dataset.v;render();scrollTo(0,0);break;
+  case 'openQ':S.view='q';S.qid=b.dataset.q;render();scrollTo(0,0);break;
+  case 'unlock':doUnlock(b.dataset.q);break;
+  case 'answer':doAnswer(b.dataset.q);break;
+  case 'zoom':zoom(b.dataset.src);break;
+  case 'toAdmin':location.hash='admin';break;
+  case 'toPlay':S.picked=S.gid;S.view=null;location.hash='';route();break;
+  case 'tab':S.tab=b.dataset.v;render();break;
+  case 'selQ':S.aq=b.dataset.q;render();break;
+  case 'newGame':{const id=uid('g');await w(async()=>{await gRef(id).set(newGameDoc(id,'新的實境遊戲'));for(let i=0;i<3;i++){const q=uid('q');await writeQ(id,q,blankQ(i),{unlock:code4(),answer:''})}},'已建立新遊戲');selectGame(id);S.tab='info';render();break}
+  case 'dupGame':{if(!g)break;const id=uid('g');await w(async()=>{const {id:_,...rest}=g;await gRef(id).set({...rest,id,title:g.title+'（複製）',round:0,createdAt:Date.now()});
+      for(const q of allQs()){const nq=uid('q'),{id:__,unlockHash,answerHash,...qd}=q;await writeQ(id,nq,qd,S.secrets[q.id]||{})}},'已複製遊戲');selectGame(id);render();break}
+  case 'delGame':{if(!g||!await ask('刪除「'+g.title+'」？','題目、劇情與設定都會刪除，無法復原。','刪除'))break;
+    await w(async()=>{for(const q of S.qs){await qRef(g.id,q.id).delete();await sRef(g.id,q.id).delete()}await gRef(g.id).delete();if(S.site.activeGame===g.id)await S.db.doc('meta/site').set({...S.site,activeGame:null})},'已刪除');selectGame(gameList().find(x=>x.id!==g.id)?.id||null);render();break}
+  case 'seed':{let id;await w(async()=>{id=await seedSample()},'已載入範例遊戲');if(id){selectGame(id);render()}break}
+  case 'login':{if(!S.auth)break;const {auth,AU}=S.auth;try{await AU.signInWithPopup(auth,new AU.GoogleAuthProvider())}catch(x){if(/popup/.test(x?.code||''))AU.signInWithRedirect(auth,new AU.GoogleAuthProvider());else toast('登入失敗：'+(x?.code||''))}break}
+  case 'logout':if(S.auth)S.auth.AU.signOut(S.auth.auth);break;
+  case 'setActive':w(()=>S.db.doc('meta/site').set({...S.site,activeGame:g.id}),'玩家現在會看到這個遊戲');break;
+  case 'saveInfo':{const d={};['title','subtitle','instructions','opening','ending','clearTitle','clearText'].forEach(k=>d[k]=val('gi-'+k));if(!d.title.trim()){toast('遊戲名稱不能空白');break}w(()=>gRef(g.id).update(d),'已儲存');break}
+  case 'resetRound':if(await ask('重置所有玩家進度？','每支手機上的解鎖與破關紀錄都會歸零，適合在新一場活動開始前使用。','重置'))w(()=>gRef(g.id).update({round:(g.round||0)+1}),'已重置，新一場開始');break;
+  case 'runCmd':runCommands(val('cmd'));break;
+  case 'preset':runCommands('主題 '+b.dataset.v);break;
+  case 'clearBg':w(()=>gRef(g.id).update({theme:{...themeOf(g),bgId:null}}),'已移除背景圖');break;
+  case 'addQ':{const qs=allQs();if(qs.length>=15)break;const id=uid('q');await w(()=>writeQ(g.id,id,blankQ((qs.at(-1)?.order??-1)+1),{unlock:code4(),answer:''}),'已新增題目');S.aq=id;render();break}
+  case 'randCode':{const el=document.getElementById('qf-unlock');if(el)el.value=code4();break}
+  case 'saveQ':{const q=S.qs.find(x=>x.id===S.aq);if(!q)break;const c=val('qf-unlock').trim();if(c&&!/^\d{4}$/.test(c)){toast('現場遊戲碼要是 4 位數字');break}
+    const dup=allQs().find(x=>x.id!==q.id&&S.secrets[x.id]?.unlock===c&&c);if(dup){toast('這個遊戲碼和其他題重複了');break}
+    const {id,unlockHash,answerHash,...base}=q;const data={...base,title:val('qf-title'),location:val('qf-loc'),story:val('qf-story'),prompt:val('qf-prompt'),hint:val('qf-hint'),ci:!!document.getElementById('qf-ci')?.checked,visible:!!document.getElementById('qf-vis')?.checked};
+    w(()=>writeQ(g.id,q.id,data,{unlock:c,answer:val('qf-answer')}),'已儲存，玩家畫面已更新');break}
+  case 'delQ':{const q=S.qs.find(x=>x.id===S.aq);if(!q||!await ask('刪除「'+(q.title||'這一題')+'」？','題目內容與答案都會刪除。','刪除'))break;await w(async()=>{await qRef(g.id,q.id).delete();await sRef(g.id,q.id).delete()},'已刪除');S.aq=null;render();break}
+  case 'moveQ':{const qs=allQs(),i=qs.findIndex(x=>x.id===S.aq),j=i+(+b.dataset.d);if(j<0||j>=qs.length)break;const A=qs[i],B=qs[j];let oa=A.order??i,ob=B.order??j;if(oa===ob){oa=i;ob=j}
+    await w(async()=>{await qRef(g.id,A.id).update({order:ob});await qRef(g.id,B.id).update({order:oa})});break}
+  case 'imgDel':case 'imgMove':{const q=S.qs.find(x=>x.id===S.aq);if(!q)break;const im=(q.images||[]).slice(),k=+b.dataset.k;
+    if(a==='imgDel')im.splice(k,1);else{const j=k+(+b.dataset.d);if(j<0||j>=im.length)break;[im[k],im[j]]=[im[j],im[k]]}w(()=>qRef(g.id,q.id).update({images:im}));break}
+  case 'unpin':w(()=>qRef(g.id,S.aq).update({x:null,y:null}),'已移除圖釘');break;
+  case 'clearMap':w(()=>gRef(g.id).update({mapId:null}),'已移除地圖');break;
+  case 'saveShare':{const u=val('share').trim();if(u&&!/^https:\/\//.test(u)){toast('請貼上 https:// 開頭的連結');break}w(()=>S.db.doc('meta/site').set({...S.site,shareUrl:u}),'已儲存連結');break}
+  }});
+document.addEventListener('change',async e=>{const el=e.target;
+  if(el.id==='a-game'){selectGame(el.value);render();return}
+  const up=el.dataset?.up;if(!up||!el.files?.length||!S.assets)return;const g=game();const files=[...el.files];toast('上傳中…');
+  await w(async()=>{const ids=await upload(up==='qimg'?files:files.slice(0,1));
+    if(up==='qimg'){const q=S.qs.find(x=>x.id===S.aq);await qRef(g.id,q.id).update({images:[...(q.images||[]),...ids]})}
+    else if(up==='map')await gRef(g.id).update({mapId:ids[0]});
+    else if(up==='bg')await gRef(g.id).update({theme:{...themeOf(g),bgId:ids[0]}})},'上傳完成')});
+document.addEventListener('keydown',e=>{if(e.key!=='Enter')return;const id=e.target.id;if(id==='ucode')document.querySelector('[data-act=unlock]')?.click();if(id==='ans')document.querySelector('[data-act=answer]')?.click();if(id==='team')document.querySelector('[data-act=start]')?.click();
+  if(id==='cmd'&&(e.metaKey||e.ctrlKey)){e.preventDefault();runCommands(val('cmd'))}});
+document.addEventListener('input',e=>{if(e.target.id==='ucode')e.target.value=e.target.value.replace(/\D/g,'').slice(0,4)});
+
+/* ---------- render ---------- */
+function viewKey(){return S.route+':'+S.gid+':'+(S.route==='admin'?S.tab+':'+S.aq:(S.view||'')+':'+S.qid)}
+function render(){if(S.route==='admin'){const qs=allQs();if(!qs.find(x=>x.id===S.aq))S.aq=qs[0]?.id||null}const key=viewKey(),keep={};let fid=null,sel=null;
+  if(key===S.lastKey){app.querySelectorAll('input[id],textarea[id]').forEach(el=>{if(el.type==='file')return;keep[el.id]=el.type==='checkbox'?el.checked:el.value});const ae=document.activeElement;if(ae&&ae.id&&app.contains(ae)){fid=ae.id;try{sel=[ae.selectionStart,ae.selectionEnd]}catch(x){}}}
+  applyTheme();app.innerHTML=S.route==='admin'?adminView():playerView();
+  for(const id in keep){const el=document.getElementById(id);if(el){if(el.type==='checkbox')el.checked=keep[id];else el.value=keep[id]}}
+  if(fid){const el=document.getElementById(fid);if(el){el.focus({preventScroll:true});if(sel&&sel[0]!=null)try{el.setSelectionRange(sel[0],sel[1])}catch(x){}}}
+  S.lastKey=key;
+  if(window.QRCode)app.querySelectorAll('.qr[data-u]').forEach(el=>{try{new QRCode(el,{text:el.dataset.u,width:168,height:168,correctLevel:QRCode.CorrectLevel.M})}catch(x){el.textContent=el.dataset.u}});
+  else app.querySelectorAll('.qr[data-u]').forEach(el=>{el.innerHTML='<p class="small" style="word-break:break-all">'+esc(el.dataset.u)+'</p>'});}
+setInterval(()=>{const el=document.getElementById('elapsed'),p=S.prog;if(el&&p&&p.start)el.textContent=fmtTime((p.end||Date.now())-p.start)},1000);
+
+/* ---------- subscriptions ---------- */
+function selectGame(id){if(S.route==='admin'||id)S.picked=id;subGame(curGid())}
+function subGame(gid){if(gid===S.gid&&S.subQ)return;S.gid=gid;S.prog=null;S.qs=[];S.secrets={};S.aq=null;if(S.subQ){S.subQ();S.subQ=null}if(S.subS){S.subS();S.subS=null}if(!gid||!S.db)return;
+  S.subQ=S.db.collection('games/'+gid+'/questions').onSnapshot(s=>{S.qs=s.docs.map(d=>({...d.data(),id:d.id}));render();tryPending()},e=>console.warn(e));
+  subSecrets()}
+function subSecrets(){if(S.subS){S.subS();S.subS=null}S.secrets={};if(!S.canEdit||!S.gid||!S.db)return;S.subS=S.db.collection('secrets/'+S.gid+'/q').onSnapshot(s=>{const o={};s.docs.forEach(d=>o[d.id]=d.data());S.secrets=o;render()},e=>console.warn(e))}
+function route(){const h=decodeURIComponent(location.hash.slice(1));if(h==='admin'){S.route='admin';if(!S.picked)S.picked=S.gid}else{S.route='play';const m=/^u-([A-Za-z0-9]+)-(\d{4})$/.exec(h);if(m)S.pending={qid:m[1],code:m[2]}}
+  subGame(curGid());render();tryPending()}
+window.addEventListener('hashchange',route);
+function localStore(){const KEY='3sia-demo-db';let m;try{m=new Map(JSON.parse(localStorage.getItem(KEY)||'[]'))}catch(e){m=new Map()}
+  const subs=new Set(),save=()=>{try{localStorage.setItem(KEY,JSON.stringify([...m]))}catch(e){throw{code:'quota'}}},fire=()=>setTimeout(()=>subs.forEach(f=>f()));
+  const cl=d=>JSON.parse(JSON.stringify(d)),snap=p=>{const d=m.get(p);return{id:p.split('/').pop(),exists:!!d,data:()=>d&&cl(d),metadata:{fromCache:false}}};
+  const doc=p=>({get:async()=>snap(p),set:async d=>{m.set(p,cl(d));save();fire()},update:async d=>{if(!m.has(p))throw{code:'not-found'};m.set(p,{...m.get(p),...cl(d)});save();fire()},delete:async()=>{m.delete(p);save();fire()},
+    onSnapshot(n){const f=()=>n(snap(p));subs.add(f);setTimeout(f);return()=>subs.delete(f)}});
+  const col=c=>({onSnapshot(n){const L=c.split('/').length+1,f=()=>n({docs:[...m.keys()].filter(k=>k.startsWith(c+'/')&&k.split('/').length===L).map(snap),metadata:{fromCache:false}});subs.add(f);setTimeout(f);return()=>subs.delete(f)}});
+  addEventListener('storage',e=>{if(e.key===KEY){try{m=new Map(JSON.parse(e.newValue||'[]'))}catch(x){}fire()}});return{doc,collection:col}}
+async function fireStore(cfg){const B='https://www.gstatic.com/firebasejs/10.14.1/';
+  const [A,FS,AU]=await Promise.all([import(B+'firebase-app.js'),import(B+'firebase-firestore.js'),import(B+'firebase-auth.js')]);
+  const app=A.initializeApp(cfg),F=FS.initializeFirestore(app,{ignoreUndefinedProperties:true}),auth=AU.getAuth(app);
+  const wrap=x=>({id:x.id,exists:x.exists(),data:()=>x.data(),metadata:x.metadata});
+  const doc=p=>{const r=FS.doc(F,p);return{get:async()=>wrap(await FS.getDoc(r)),set:d=>FS.setDoc(r,d),update:d=>FS.updateDoc(r,d),delete:()=>FS.deleteDoc(r),onSnapshot:(n,e)=>FS.onSnapshot(r,x=>n(wrap(x)),e)}};
+  const col=p=>({onSnapshot:(n,e)=>FS.onSnapshot(FS.collection(F,p),x=>n({docs:x.docs.map(wrap),metadata:x.metadata}),e)});
+  return{db:{doc,collection:col},auth:{auth,AU}}}
+(async()=>{const timer=setTimeout(()=>{S.slow=true;render()},10000);const C=window.GAME_CONFIG||{};
+  const admins=(C.admins||[]).map(x=>String(x).toLowerCase().trim());
+  if(!C.firebase||!C.firebase.apiKey){S.demo=true;S.db=localStore();S.canEdit=true;S.assets=true}
+  else{try{const r=await fireStore(C.firebase);S.db=r.db;S.auth=r.auth;
+      r.auth.AU.onAuthStateChanged(r.auth.auth,u=>{S.authUser=u;S.canEdit=!!(u&&u.email&&admins.includes(u.email.toLowerCase()));S.assets=S.canEdit;subSecrets();render()});
+      r.auth.AU.getRedirectResult(r.auth.auth).catch(()=>{})}
+    catch(e){console.error(e);clearTimeout(timer);S.noDb=true;S.loaded=true;S.loadErr='無法連線到 Firebase，請確認網路與 config.js 設定。';route();return}}
+  const fail=e=>{console.warn(e);clearTimeout(timer);S.loaded=true;if(e?.code==='permission-denied'){S.noDb=true;S.loadErr='資料庫拒絕讀取：請到 Firebase 發佈 firestore.rules 安全規則。'}render()};
+  S.db.doc('meta/site').onSnapshot(d=>{S.site=d.exists?{...d.data()}:{};subGame(curGid());render()},fail);
+  let seeded=false;
+  S.db.collection('games').onSnapshot(x=>{const o={};x.docs.forEach(d=>o[d.id]={...d.data(),id:d.id});S.games=o;if(!x.metadata.fromCache){S.loaded=true;clearTimeout(timer)}
+    if(S.demo&&!seeded&&!x.docs.length&&!LS.get('3sia-demo-seeded')){seeded=true;LS.set('3sia-demo-seeded',1);seedSample().then(()=>toast('示範模式：已載入範例遊戲'))}
+    subGame(curGid());render()},fail);
+  route()})();
+}
+</script>
+</body>
+</html>
