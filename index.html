@@ -68,6 +68,7 @@ textarea.inp{min-height:110px;resize:vertical;line-height:1.6}
 .pin.open span{background:var(--accent);border-color:var(--accent-ink)}.pin.open b{color:var(--accent-ink)}
 .pin.solved span{background:#3a9d5d;border-color:#fff}.pin.solved b{color:#fff}
 .pin.sel span{outline:4px solid #fff}
+.kv{border-radius:var(--radius);overflow:hidden;border:1px solid var(--line);background:var(--panel);box-shadow:0 10px 30px rgba(0,0,0,.25)}.kv img{display:block;width:100%;height:auto;max-height:62vh;object-fit:cover}
 .qgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}
 .qcard{position:relative;display:grid;gap:4px;text-align:left;padding:14px;border-radius:var(--radius);background:var(--panel);border:1px solid var(--line);cursor:pointer;min-height:150px}
 .qcard .lock{width:64px;height:54px;margin:0}
@@ -238,6 +239,7 @@ function vStory(g,p){const first=p.stage==='story';return `<div class="screen">$
 function vBoard(g,p){const qs=playQs(),n=qs.filter(q=>p.solved.includes(q.id)).length,all=qs.length&&n===qs.length;
   const map=g.mapId?`<div class="map mb">${'<img src="'+img(g.mapId)+'" alt="遊戲地圖">'}${qs.map((q,i)=>q.x==null?'':`<button class="pin ${qState(q)}" style="left:${q.x}%;top:${q.y}%" data-act="openQ" data-q="${q.id}" aria-label="第 ${i+1} 關"><span></span><b>${i+1}</b></button>`).join('')}</div>`:'';
   return `<div class="screen">${topbar(g,p)}
+${g.boardImg?`<div class="kv mb"><img src="${img(g.boardImg)}" alt="${esc(g.title)} 主視覺"></div>`:''}
 <div class="mb"><div class="row" style="justify-content:space-between;margin-bottom:8px"><b>破解進度</b><span class="muted small">用時 <span class="num" id="elapsed">${fmtTime((p.end||Date.now())-p.start)}</span></span></div><div class="prog"><i style="width:${qs.length?n/qs.length*100:0}%"></i></div></div>
 ${all?`<div class="panel mb center stack"><b>所有鎖都打開了</b><button class="btn wide" data-act="stage" data-v="ending">觀看結局</button></div>`:''}
 ${map}<div class="qgrid">${qs.map((q,i)=>{const s=qState(q);return `<button class="qcard ${s}" data-act="openQ" data-q="${q.id}">${lockSvg(s==='solved'?'open solved':'')}<span class="n">第 ${i+1} 關</span><b>${esc(s==='locked'?(q.location||'未知地點'):q.title)}</b><span class="st">${s==='solved'?'已破解':s==='open'?'已進入・待解題':'到現場輸入遊戲碼'}</span></button>`}).join('')||'<p class="muted">關卡尚未開放</p>'}</div></div>${navbar('board')}`}
@@ -318,6 +320,7 @@ function tStyle(g){const t=themeOf(g);return `<div class="split"><div class="sta
 <textarea class="inp" id="cmd" rows="3" placeholder="主題 駭客&#10;主色 #ff6b35&#10;字體 Noto Serif TC" style="font-family:ui-monospace,monospace"></textarea>
 <div class="row"><button class="btn" data-act="runCmd">執行</button></div><div class="console" id="clog">${esc(S.clog.join('\n')||'> 等待指令…')}</div></div>
 <div class="panel stack"><h3>快速主題</h3><div class="chips">${Object.entries(PRESETS).map(([k,v])=>`<button data-act="preset" data-v="${k}"><span class="sw" style="background:${v.accent}"></span>${k}</button>`).join('')}</div>
+<h3 class="mt">任務頁主視覺</h3><p class="muted small">顯示在任務地圖頁最上方，建議橫式圖片（例如 16:9）。</p>${g.boardImg?`<div class="kv" style="max-width:360px"><img src="${img(g.boardImg)}" alt=""></div>`:''}<div class="row"><label class="upl">${g.boardImg?'更換主視覺':'上傳主視覺'}<input type="file" accept="image/*,.heic,.heif" data-up="board"></label>${g.boardImg?'<button class="btn ghost" data-act="clearBoard">移除主視覺</button>':''}</div>
 <h3 class="mt">背景圖片</h3><div class="row"><label class="upl">上傳背景圖<input type="file" accept="image/*" data-up="bg"></label>${t.bgId?'<button class="btn ghost" data-act="clearBg">移除背景圖</button>':''}</div></div></div>
 <div class="stack"><b>預覽（玩家看到的樣子）</b><div class="preview stack" style="${themeVars(t)};${t.bgId?`background:linear-gradient(color-mix(in srgb,${t.bg} 85%,transparent),color-mix(in srgb,${t.bg} 85%,transparent)),url("${img(t.bgId)}") center/cover`:''}">
 <h1 style="font-size:34px">${esc(g.title)}</h1><div class="panel row" style="justify-content:space-between">${lockSvg()}<div style="flex:1"><b>第 1 關</b><p class="st" style="margin:0">到現場輸入遊戲碼</p></div></div>
@@ -439,6 +442,7 @@ document.addEventListener('click',async e=>{const b=e.target.closest('[data-act]
   case 'imgDel':case 'imgMove':{const q=S.qs.find(x=>x.id===S.aq);if(!q)break;const im=(q.images||[]).slice(),k=+b.dataset.k;
     if(a==='imgDel')im.splice(k,1);else{const j=k+(+b.dataset.d);if(j<0||j>=im.length)break;[im[k],im[j]]=[im[j],im[k]]}w(()=>qRef(g.id,q.id).update({images:im}));break}
   case 'unpin':w(()=>qRef(g.id,S.aq).update({x:null,y:null}),'已移除圖釘');break;
+  case 'clearBoard':w(()=>gRef(g.id).update({boardImg:null}),'已移除主視覺');break;
   case 'clearMap':w(()=>gRef(g.id).update({mapId:null}),'已移除地圖');break;
   case 'saveShare':{const u=val('share').trim();if(u&&!/^https:\/\//.test(u)){toast('請貼上 https:// 開頭的連結');break}w(()=>S.db.doc('meta/site').set({...S.site,shareUrl:u}),'已儲存連結');break}
   }});
@@ -448,6 +452,7 @@ document.addEventListener('change',async e=>{const el=e.target;
   await w(async()=>{const ids=await upload(up==='qimg'?files:files.slice(0,1));
     if(up==='qimg'){const q=S.qs.find(x=>x.id===S.aq);await qRef(g.id,q.id).update({images:[...(q.images||[]),...ids]})}
     else if(up==='map')await gRef(g.id).update({mapId:ids[0]});
+    else if(up==='board')await gRef(g.id).update({boardImg:ids[0]});
     else if(up==='bg')await gRef(g.id).update({theme:{...themeOf(g),bgId:ids[0]}})},'上傳完成')});
 document.addEventListener('keydown',e=>{if(e.key!=='Enter')return;const id=e.target.id;if(id==='ucode')document.querySelector('[data-act=unlock]')?.click();if(id==='ans')document.querySelector('[data-act=answer]')?.click();if(id==='team')document.querySelector('[data-act=start]')?.click();
   if(id==='cmd'&&(e.metaKey||e.ctrlKey)){e.preventDefault();runCommands(val('cmd'))}});
