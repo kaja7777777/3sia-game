@@ -28,6 +28,7 @@ h2{font-size:26px;line-height:1.2;font-weight:900;margin:0 0 12px;text-wrap:bala
 h3{font-size:18px;margin:0 0 6px}
 p{margin:0 0 12px}.muted{color:var(--muted)}.small{font-size:13px}
 .prose{font-size:17px;line-height:1.85;overflow-wrap:anywhere}
+.prose pre.code{font:13px/1.55 ui-monospace,Menlo,Consolas,monospace;background:color-mix(in srgb,var(--bg) 65%,var(--panel));border:1px solid var(--line);padding:10px 12px;border-radius:10px;overflow-x:auto;white-space:pre;overflow-wrap:normal;margin:8px 0}
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:48px;padding:0 22px;border-radius:999px;border:0;background:var(--accent);color:var(--accent-ink);font-weight:700;cursor:pointer;text-decoration:none}
 .btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
 .btn.wide{width:100%}.btn:disabled{opacity:.45;cursor:not-allowed}
@@ -158,7 +159,7 @@ const S={db:null,user:null,assets:null,canEdit:false,games:{},site:{},qs:[],secr
 
 /* ---------- helpers ---------- */
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const rich=s=>esc(s).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/\n/g,'<br>');
+const rich=s=>String(s??'').split(/```\n?([\s\S]*?)\n?```/).map((p,i)=>i%2?'<pre class="code">'+esc(p)+'</pre>':esc(p).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/\n/g,'<br>')).join('');
 const BLANK='data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==',IMG={},PEND=new Set();
 function img(id){if(!id)return BLANK;if(IMG[id])return IMG[id];if(S.db&&!PEND.has(id)){PEND.add(id);S.db.doc('images/'+id).get().then(d=>{IMG[id]=d.exists?d.data().data:BLANK;schedRender()}).catch(()=>{})}return BLANK}
 let rq=0;function schedRender(){if(!rq)rq=requestAnimationFrame(()=>{rq=0;render()})}
@@ -330,13 +331,13 @@ function tQs(g){const qs=allQs(),q=qs.find(x=>x.id===S.aq)||qs[0];if(q)S.aq=q.id
   return `<div class="split">${list}<div class="panel stack"><div class="row" style="justify-content:space-between"><h3>第 ${i+1} 題</h3><div class="row">
 <button class="btn ghost" data-act="moveQ" data-d="-1" ${i===0?'disabled':''} aria-label="上移">↑</button><button class="btn ghost" data-act="moveQ" data-d="1" ${i===qs.length-1?'disabled':''} aria-label="下移">↓</button><button class="btn danger" data-act="delQ">刪除</button></div></div>
 ${fld('qf-title','題目名稱',q.title)}${fld('qf-loc','地點名稱',q.location,{hint:'鎖住時玩家只會看到地點，例如「圖書館二樓」'})}
-${fld('qf-story','題目劇情',q.story,{area:1,rows:6})}${fld('qf-prompt','資安題目內容',q.prompt,{area:1,rows:6})}${fld('qf-hint','提示（可留空）',q.hint,{area:1,rows:3})}
+${fld('qf-story','題目劇情',q.story,{area:1,rows:6})}${fld('qf-prompt','資安題目內容',q.prompt,{area:1,rows:6,hint:'**文字** 變粗體；用 ``` 上下包住的段落會用等寬字顯示（適合程式碼、目錄樹、資料表）'})}${fld('qf-hint','提示（可留空）',q.hint,{area:1,rows:3})}
 <div class="row" style="align-items:end"><div style="flex:1 1 160px">${fld('qf-unlock','現場遊戲碼（4 位數）',sec.unlock??'',{attr:'inputmode="numeric" maxlength="4"'})}</div><button class="btn ghost" data-act="randCode">隨機產生</button></div>
 ${fld('qf-answer','解題碼（答案）',sec.answer??'',{hint:'只會以雜湊形式提供給玩家，看不到明文'})}
 <label class="row"><input type="checkbox" id="qf-ci" ${q.ci!==false?'checked':''} style="width:22px;height:22px"> 答案不分大小寫、忽略前後空白</label>
 <label class="row"><input type="checkbox" id="qf-vis" ${q.visible!==false?'checked':''} style="width:22px;height:22px"> 在玩家畫面顯示這一題</label>
 <div class="stack"><b>題目圖片（${imgs.length} 張）</b><div class="thumbs">${imgs.map((id,k)=>`<div class="thumb"><img src="${img(id)}" alt=""><div class="row"><button data-act="imgMove" data-k="${k}" data-d="-1" aria-label="左移">←</button><button data-act="imgDel" data-k="${k}" aria-label="刪除">✕</button><button data-act="imgMove" data-k="${k}" data-d="1" aria-label="右移">→</button></div></div>`).join('')}</div>
-${S.assets?`<div><label class="upl">＋ 上傳圖片（可多選）<input type="file" accept="image/*" multiple data-up="qimg"></label></div>`:'<p class="muted small">這個檢視無法上傳圖片</p>'}</div>
+${S.assets?`<div><label class="upl">＋ 上傳圖片（可多選）<input type="file" accept="image/*,.heic,.heif" multiple data-up="qimg"></label></div>`:'<p class="muted small">這個檢視無法上傳圖片</p>'}</div>
 <div class="row"><button class="btn" data-act="saveQ">儲存這一題</button><span class="muted small">圖片上傳後會立即生效；文字要按儲存</span></div></div></div>`}
 function tMap(g){const qs=allQs(),sel=qs.find(x=>x.id===S.aq)||qs[0];if(sel)S.aq=sel.id;
   return `<div class="split"><div class="panel stack"><h3>放置題目到地圖</h3><p class="muted small">先選一題，再點地圖上的位置。玩家會看到編號圖釘，鎖住、進入、破解狀態會變色。</p>
@@ -375,7 +376,9 @@ async function seedSample(){const id=uid('g');await gRef(id).set({...newGameDoc(
 const blankQ=(o)=>({order:o,title:'第 '+(o+1)+' 關',location:'',story:'',prompt:'',hint:'',images:[],x:null,y:null,visible:true,ci:true});
 async function shrink(f,max=1800){try{if(!/^image\/(jpeg|png|webp)$/.test(f.type))return f;const b=await createImageBitmap(f),s=Math.min(1,max/Math.max(b.width,b.height));if(s===1&&f.size<1.8e6)return f;
   const c=document.createElement('canvas');c.width=Math.round(b.width*s);c.height=Math.round(b.height*s);c.getContext('2d').drawImage(b,0,0,c.width,c.height);const t=f.type==='image/png'?'image/png':'image/jpeg';return await new Promise(r=>c.toBlob(x=>r(x||f),t,.86))}catch(e){return f}}
-async function toDataURL(f){const b=await createImageBitmap(f);let max=1400,q=.82,u='';for(let t=0;t<8;t++){const s=Math.min(1,max/Math.max(b.width,b.height)),c=document.createElement('canvas');c.width=Math.round(b.width*s);c.height=Math.round(b.height*s);const x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,c.width,c.height);x.drawImage(b,0,0,c.width,c.height);u=c.toDataURL('image/jpeg',q);if(u.length<850000)break;if(q>.5)q-=.12;else max=Math.round(max*.8)}return u}
+async function toDataURL(f){let b=f;if(/\.hei[cf]$/i.test(f.name||'')||/hei[cf]/i.test(f.type||'')){if(!window.heic2any)await new Promise((ok,no)=>{const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js';s.onload=ok;s.onerror=()=>no(new Error('heic'));document.head.appendChild(s)});const r=await heic2any({blob:f,toType:'image/jpeg',quality:.9});b=Array.isArray(r)?r[0]:r}
+  const url=URL.createObjectURL(b),im=new Image();await new Promise((ok,no)=>{im.onload=ok;im.onerror=()=>no(new Error('decode'));im.src=url});let w=im.naturalWidth||1200,h=im.naturalHeight||900;if(/svg/i.test(b.type||'')&&w<1200){h=Math.round(h*1200/w);w=1200}
+  let max=1400,q=.82,u='';for(let t=0;t<8;t++){const s=Math.min(1,max/Math.max(w,h)),c=document.createElement('canvas');c.width=Math.round(w*s);c.height=Math.round(h*s);const x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,c.width,c.height);x.drawImage(im,0,0,c.width,c.height);u=c.toDataURL('image/jpeg',q);if(u.length<850000)break;if(q>.5)q-=.12;else max=Math.round(max*.8)}URL.revokeObjectURL(url);return u}
 async function upload(files){const out=[];for(const f of files){const u=await toDataURL(f),id=uid('i');await S.db.doc('images/'+id).set({data:u,gid:S.gid,createdAt:Date.now()});IMG[id]=u;out.push(id)}return out}
 function runCommands(text){const g=game();if(!g)return;const t={...themeOf(g)};const log=[];let title=null;
   const lines=text.split(/[\n;；]/).map(s=>s.trim()).filter(Boolean);
